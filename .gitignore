@@ -1,0 +1,35 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Generated benchmark outputs
+outputs/
+
+# Local secrets and machine-specific LLM configs
+.env
+.env.*
+configs/*.yaml
+configs/*.yml
+!configs/*.example.yaml
+!configs/*.example.yml
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

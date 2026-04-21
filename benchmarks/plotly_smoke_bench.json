@@ -1,0 +1,745 @@
+[
+  {
+    "case_id": "plotly-annotation-pass",
+    "query": "Create a Plotly sunburst chart with a descriptive subtitle.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'Major Area': 'Asia', 'Regions': 'East', 'Country': 'China', 'Overall score': 70},\n    {'Major Area': 'Europe', 'Regions': 'West', 'Country': 'France', 'Overall score': 80}\n])\nfig = px.sunburst(df, path=['Major Area', 'Regions', 'Country'], values='Overall score', title='Global Food Security Index, 2020')\nfig.add_annotation(text='Overall score 0-100, 100 = best environment', x=0.5, y=1.02, xref='paper', yref='paper', showarrow=False)\npio.write_image(fig, 'plotly_annotation_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Global Food Security Index, 2020",
+          "projection": "plotly",
+          "text_contains": [
+            "Overall score 0-100, 100 = best environment"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_annotation_capture"
+    }
+  },
+  {
+    "case_id": "plotly-axis-legend-pass",
+    "query": "Create a Plotly grouped bar chart of sales by category and segment.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'sales': 10, 'segment': 'North'},\n    {'category': 'B', 'sales': 7, 'segment': 'South'}\n])\nfig = px.bar(df, x='category', y='sales', color='segment', title='Regional Sales')\nfig.update_layout(xaxis_title='Category', yaxis_title='Sales')\npio.write_image(fig, 'plotly_axis_legend_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Regional Sales",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_axis_legend_capture"
+    }
+  },
+  {
+    "case_id": "plotly-trace-text-pass",
+    "query": "Create a Plotly bar chart with bar labels peak and low.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_bar(x=['A', 'B'], y=[10, 7], text=['peak', 'low'])\nfig.update_layout(title='Bar Labels')\nfig.write_image('plotly_trace_text_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Bar Labels",
+          "projection": "plotly",
+          "text_contains": [
+            "peak",
+            "low"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_trace_text_capture"
+    }
+  },
+  {
+    "case_id": "plotly-annotation-missing-fail",
+    "query": "Create a Plotly bar chart with a missing note.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'sales': 10},\n    {'category': 'B', 'sales': 7}\n])\nfig = px.bar(df, x='category', y='sales', title='Sales Overview')\npio.write_image(fig, 'plotly_annotation_missing_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales Overview",
+          "projection": "plotly",
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_real_missing_annotation"
+    }
+  },
+  {
+    "case_id": "plotly-facet-axes-pass",
+    "query": "Create a Plotly faceted bar chart with one panel per region.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'sales': 10, 'region': 'East'},\n    {'category': 'B', 'sales': 7, 'region': 'East'},\n    {'category': 'A', 'sales': 6, 'region': 'West'},\n    {'category': 'B', 'sales': 9, 'region': 'West'}\n])\nfig = px.bar(df, x='category', y='sales', facet_col='region', title='Facet Sales')\npio.write_image(fig, 'plotly_facet_axes_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 2,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Facet Sales",
+          "projection": "plotly",
+          "text_contains": [
+            "region=East"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_facet_axes_capture"
+    }
+  },
+  {
+    "case_id": "plotly-shape-pass",
+    "query": "Create a Plotly line chart with one threshold reference line.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_scatter(x=[1, 2], y=[3, 4], mode='lines', name='Series')\nfig.add_shape(type='line', x0=1, x1=2, y0=3.5, y1=3.5)\nfig.update_layout(title='Threshold Line')\nfig.write_image('plotly_shape_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Threshold Line",
+          "projection": "plotly",
+          "artist_counts": {
+            "shape": 1
+          }
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_shape_capture"
+    }
+  },
+  {
+    "case_id": "plotly-colorbar-title-pass",
+    "query": "Create a Plotly heatmap with a colorbar title.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure(data=go.Heatmap(z=[[1, 2], [3, 4]], colorbar=dict(title='Intensity')))\nfig.update_layout(title='Heatmap')\nfig.write_image('plotly_colorbar_title_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Heatmap",
+          "projection": "plotly",
+          "text_contains": [
+            "Intensity"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_colorbar_capture"
+    }
+  },
+  {
+    "case_id": "plotly-full-bar-data-pass",
+    "query": "Show total sales by category in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_bar(x=['A', 'B'], y=[10, 7])\nfig.update_layout(title='Sales by Category')\nfig.write_image('plotly_full_bar_data_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "projection": "plotly"
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_basic_data_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-bar-data-wrong-fail",
+    "query": "Show total sales by category in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_bar(x=['A', 'B'], y=[10, 99])\nfig.update_layout(title='Sales by Category')\nfig.write_image('plotly_full_bar_data_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "projection": "plotly"
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_basic_data_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-grouped-bar-data-pass",
+    "query": "Show total sales by category and segment in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "segment": "North",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "segment": "North",
+        "sales": 7
+      },
+      {
+        "category": "A",
+        "segment": "South",
+        "sales": 6
+      },
+      {
+        "category": "B",
+        "segment": "South",
+        "sales": 9
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_bar(name='North', x=['A', 'B'], y=[10, 7])\nfig.add_bar(name='South', x=['A', 'B'], y=[6, 9])\nfig.update_layout(title='Grouped Sales')\nfig.write_image('plotly_full_grouped_bar_data_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Grouped Sales",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_multi_trace_data_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-grouped-bar-data-wrong-fail",
+    "query": "Show total sales by category and segment in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "segment": "North",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "segment": "North",
+        "sales": 7
+      },
+      {
+        "category": "A",
+        "segment": "South",
+        "sales": 6
+      },
+      {
+        "category": "B",
+        "segment": "South",
+        "sales": 9
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_bar(name='North', x=['A', 'B'], y=[10, 7])\nfig.add_bar(name='South', x=['A', 'B'], y=[6, 99])\nfig.update_layout(title='Grouped Sales')\nfig.write_image('plotly_full_grouped_bar_data_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Grouped Sales",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_multi_trace_data_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-multi-line-pass",
+    "query": "Show sales by month and region in a line chart.",
+    "schema": {
+      "columns": {
+        "month": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "month": "Jan",
+        "region": "North",
+        "sales": 3
+      },
+      {
+        "month": "Feb",
+        "region": "North",
+        "sales": 5
+      },
+      {
+        "month": "Jan",
+        "region": "South",
+        "sales": 4
+      },
+      {
+        "month": "Feb",
+        "region": "South",
+        "sales": 6
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_scatter(name='North', x=['Jan', 'Feb'], y=[3, 5], mode='lines')\nfig.add_scatter(name='South', x=['Jan', 'Feb'], y=[4, 6], mode='lines')\nfig.update_layout(title='Regional Trend')\nfig.write_image('plotly_full_multi_line_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Regional Trend",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_multi_trace_line_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-multi-line-wrong-fail",
+    "query": "Show sales by month and region in a line chart.",
+    "schema": {
+      "columns": {
+        "month": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "month": "Jan",
+        "region": "North",
+        "sales": 3
+      },
+      {
+        "month": "Feb",
+        "region": "North",
+        "sales": 5
+      },
+      {
+        "month": "Jan",
+        "region": "South",
+        "sales": 4
+      },
+      {
+        "month": "Feb",
+        "region": "South",
+        "sales": 6
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_scatter(name='North', x=['Jan', 'Feb'], y=[3, 5], mode='lines')\nfig.add_scatter(name='South', x=['Jan', 'Feb'], y=[4, 99], mode='lines')\nfig.update_layout(title='Regional Trend')\nfig.write_image('plotly_full_multi_line_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Regional Trend",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_multi_trace_line_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-multi-scatter-pass",
+    "query": "Show sales by month and region in a scatter chart.",
+    "schema": {
+      "columns": {
+        "month": "number",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "month": 1,
+        "region": "North",
+        "sales": 3
+      },
+      {
+        "month": 2,
+        "region": "North",
+        "sales": 5
+      },
+      {
+        "month": 1,
+        "region": "South",
+        "sales": 4
+      },
+      {
+        "month": 2,
+        "region": "South",
+        "sales": 6
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_scatter(name='North', x=[1, 2], y=[3, 5], mode='markers')\nfig.add_scatter(name='South', x=[1, 2], y=[4, 6], mode='markers')\nfig.update_layout(title='Regional Scatter')\nfig.write_image('plotly_full_multi_scatter_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Regional Scatter",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_multi_trace_scatter_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-multi-scatter-wrong-fail",
+    "query": "Show sales by month and region in a scatter chart.",
+    "schema": {
+      "columns": {
+        "month": "number",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "month": 1,
+        "region": "North",
+        "sales": 3
+      },
+      {
+        "month": 2,
+        "region": "North",
+        "sales": 5
+      },
+      {
+        "month": 1,
+        "region": "South",
+        "sales": 4
+      },
+      {
+        "month": 2,
+        "region": "South",
+        "sales": 6
+      }
+    ],
+    "generated_code": "import plotly.graph_objects as go\nfig = go.Figure()\nfig.add_scatter(name='North', x=[1, 2], y=[3, 5], mode='markers')\nfig.add_scatter(name='South', x=[1, 2], y=[4, 66], mode='markers')\nfig.update_layout(title='Regional Scatter')\nfig.write_image('plotly_full_multi_scatter_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Regional Scatter",
+          "projection": "plotly",
+          "legend_labels": [
+            "North",
+            "South"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_multi_trace_scatter_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-grouped-facet-bar-pass",
+    "query": "Show sales by category and segment and region in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      { "category": "A", "segment": "Retail", "region": "East", "sales": 10 },
+      { "category": "B", "segment": "Retail", "region": "East", "sales": 7 },
+      { "category": "A", "segment": "Wholesale", "region": "East", "sales": 6 },
+      { "category": "B", "segment": "Wholesale", "region": "East", "sales": 9 },
+      { "category": "A", "segment": "Retail", "region": "West", "sales": 11 },
+      { "category": "B", "segment": "Retail", "region": "West", "sales": 8 },
+      { "category": "A", "segment": "Wholesale", "region": "West", "sales": 5 },
+      { "category": "B", "segment": "Wholesale", "region": "West", "sales": 4 }
+    ],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'segment': 'Retail', 'region': 'East', 'sales': 10},\n    {'category': 'B', 'segment': 'Retail', 'region': 'East', 'sales': 7},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'East', 'sales': 6},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'East', 'sales': 9},\n    {'category': 'A', 'segment': 'Retail', 'region': 'West', 'sales': 11},\n    {'category': 'B', 'segment': 'Retail', 'region': 'West', 'sales': 8},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'West', 'sales': 5},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'West', 'sales': 4}\n])\nfig = px.bar(df, x='category', y='sales', color='segment', facet_col='region', barmode='group', title='Grouped Facet')\npio.write_image(fig, 'plotly_full_grouped_facet_bar_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 2,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Grouped Facet",
+          "projection": "plotly",
+          "legend_labels": ["Retail", "Wholesale"],
+          "text_contains": ["region=East"]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_grouped_facet_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-grouped-facet-bar-wrong-fail",
+    "query": "Show sales by category and segment and region in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      { "category": "A", "segment": "Retail", "region": "East", "sales": 10 },
+      { "category": "B", "segment": "Retail", "region": "East", "sales": 7 },
+      { "category": "A", "segment": "Wholesale", "region": "East", "sales": 6 },
+      { "category": "B", "segment": "Wholesale", "region": "East", "sales": 9 },
+      { "category": "A", "segment": "Retail", "region": "West", "sales": 11 },
+      { "category": "B", "segment": "Retail", "region": "West", "sales": 8 },
+      { "category": "A", "segment": "Wholesale", "region": "West", "sales": 5 },
+      { "category": "B", "segment": "Wholesale", "region": "West", "sales": 4 }
+    ],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'segment': 'Retail', 'region': 'East', 'sales': 10},\n    {'category': 'B', 'segment': 'Retail', 'region': 'East', 'sales': 7},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'East', 'sales': 6},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'East', 'sales': 9},\n    {'category': 'A', 'segment': 'Retail', 'region': 'West', 'sales': 11},\n    {'category': 'B', 'segment': 'Retail', 'region': 'West', 'sales': 8},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'West', 'sales': 5},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'West', 'sales': 99}\n])\nfig = px.bar(df, x='category', y='sales', color='segment', facet_col='region', barmode='group', title='Grouped Facet')\npio.write_image(fig, 'plotly_full_grouped_facet_bar_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 2,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Grouped Facet",
+          "projection": "plotly",
+          "legend_labels": ["Retail", "Wholesale"],
+          "text_contains": ["region=East"]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_grouped_facet_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-stacked-facet-bar-pass",
+    "query": "Show sales by category and segment and region in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      { "category": "A", "segment": "Retail", "region": "East", "sales": 10 },
+      { "category": "B", "segment": "Retail", "region": "East", "sales": 7 },
+      { "category": "A", "segment": "Wholesale", "region": "East", "sales": 6 },
+      { "category": "B", "segment": "Wholesale", "region": "East", "sales": 9 },
+      { "category": "A", "segment": "Retail", "region": "West", "sales": 11 },
+      { "category": "B", "segment": "Retail", "region": "West", "sales": 8 },
+      { "category": "A", "segment": "Wholesale", "region": "West", "sales": 5 },
+      { "category": "B", "segment": "Wholesale", "region": "West", "sales": 4 }
+    ],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'segment': 'Retail', 'region': 'East', 'sales': 10},\n    {'category': 'B', 'segment': 'Retail', 'region': 'East', 'sales': 7},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'East', 'sales': 6},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'East', 'sales': 9},\n    {'category': 'A', 'segment': 'Retail', 'region': 'West', 'sales': 11},\n    {'category': 'B', 'segment': 'Retail', 'region': 'West', 'sales': 8},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'West', 'sales': 5},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'West', 'sales': 4}\n])\nfig = px.bar(df, x='category', y='sales', color='segment', facet_col='region', barmode='stack', title='Stacked Facet')\npio.write_image(fig, 'plotly_full_stacked_facet_bar_pass.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 2,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Stacked Facet",
+          "projection": "plotly",
+          "legend_labels": ["Retail", "Wholesale"],
+          "text_contains": ["region=East"]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_family": "plotly_stacked_facet_trace"
+    }
+  },
+  {
+    "case_id": "plotly-full-stacked-facet-bar-wrong-fail",
+    "query": "Show sales by category and segment and region in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "segment": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      { "category": "A", "segment": "Retail", "region": "East", "sales": 10 },
+      { "category": "B", "segment": "Retail", "region": "East", "sales": 7 },
+      { "category": "A", "segment": "Wholesale", "region": "East", "sales": 6 },
+      { "category": "B", "segment": "Wholesale", "region": "East", "sales": 9 },
+      { "category": "A", "segment": "Retail", "region": "West", "sales": 11 },
+      { "category": "B", "segment": "Retail", "region": "West", "sales": 8 },
+      { "category": "A", "segment": "Wholesale", "region": "West", "sales": 5 },
+      { "category": "B", "segment": "Wholesale", "region": "West", "sales": 4 }
+    ],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\n\ndf = pd.DataFrame([\n    {'category': 'A', 'segment': 'Retail', 'region': 'East', 'sales': 10},\n    {'category': 'B', 'segment': 'Retail', 'region': 'East', 'sales': 7},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'East', 'sales': 6},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'East', 'sales': 9},\n    {'category': 'A', 'segment': 'Retail', 'region': 'West', 'sales': 11},\n    {'category': 'B', 'segment': 'Retail', 'region': 'West', 'sales': 8},\n    {'category': 'A', 'segment': 'Wholesale', 'region': 'West', 'sales': 5},\n    {'category': 'B', 'segment': 'Wholesale', 'region': 'West', 'sales': 44}\n])\nfig = px.bar(df, x='category', y='sales', color='segment', facet_col='region', barmode='stack', title='Stacked Facet')\npio.write_image(fig, 'plotly_full_stacked_facet_bar_wrong_fail.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 2,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Stacked Facet",
+          "projection": "plotly",
+          "legend_labels": ["Retail", "Wholesale"],
+          "text_contains": ["region=East"]
+        }
+      ]
+    },
+    "verification_mode": "full",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_family": "plotly_stacked_facet_trace"
+    }
+  }
+]

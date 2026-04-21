@@ -1,0 +1,413 @@
+[
+  {
+    "case_id": "small-pass-groupby-sum-sort",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_mode": "none",
+      "failure_family": "control_pass",
+      "repairability": "not_needed",
+      "expected_repair_scope": "none",
+      "expected_improvement": "none"
+    }
+  },
+  {
+    "case_id": "small-fail-missing-groupby",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ncategories = [row[\"category\"] for row in rows]\nsales = [row[\"sales\"] for row in rows]\nplt.bar(categories, sales)\n",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "missing_groupby",
+      "failure_family": "data_transformation",
+      "repairability": "diagnose_only",
+      "expected_repair_scope": "data_transformation",
+      "expected_improvement": "no_auto_fix"
+    }
+  },
+  {
+    "case_id": "small-fail-wrong-sort",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1], reverse=True)\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "wrong_sort",
+      "failure_family": "data_order",
+      "repairability": "partially_auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_improvement": "likely_requirement_reduction"
+    }
+  },
+  {
+    "case_id": "small-error-invalid-code",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\nplt.bar(missing_categories, [1, 2])\n",
+    "metadata": {
+      "expected_behavior": "error",
+      "failure_mode": "execution_error",
+      "failure_family": "runtime_execution",
+      "repairability": "unsupported",
+      "expected_repair_scope": "none",
+      "expected_improvement": "none"
+    }
+  },
+  {
+    "case_id": "small-pass-figure-requirements",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nfig, ax = plt.subplots(figsize=(4, 3))\nfig.suptitle(\"Revenue Dashboard\")\nax.bar([key for key, value in items], [value for key, value in items], label=\"Sales\")\nax.set_title(\"Sales by Category\")\nax.set_xlabel(\"Category\")\nax.set_ylabel(\"Sales\")\nax.text(0, 7, \"lowest\")\nax.legend()\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "figure_title": "Revenue Dashboard",
+      "size_inches": [
+        4,
+        3
+      ],
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "legend_labels": [
+            "Sales"
+          ],
+          "artist_types": [
+            "patch"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "pass",
+      "failure_mode": "none",
+      "failure_family": "control_pass",
+      "repairability": "not_needed",
+      "expected_repair_scope": "none",
+      "expected_improvement": "none"
+    }
+  },
+  {
+    "case_id": "small-fail-missing-title-label",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nfig, ax = plt.subplots(figsize=(4, 3))\nax.bar([key for key, value in items], [value for key, value in items], label=\"Sales\")\nax.set_xlabel(\"Category\")\nax.legend()\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "figure_title": "Revenue Dashboard",
+      "size_inches": [
+        4,
+        3
+      ],
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "legend_labels": [
+            "Sales"
+          ],
+          "artist_types": [
+            "patch"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "missing_title_label",
+      "failure_family": "figure_local_text",
+      "repairability": "auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_improvement": "partial_or_full_pass"
+    }
+  },
+  {
+    "case_id": "small-fail-missing-legend-annotation",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nfig, ax = plt.subplots(figsize=(4, 3))\nfig.suptitle(\"Revenue Dashboard\")\nax.bar([key for key, value in items], [value for key, value in items])\nax.set_title(\"Sales by Category\")\nax.set_xlabel(\"Category\")\nax.set_ylabel(\"Sales\")\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "figure_title": "Revenue Dashboard",
+      "size_inches": [
+        4,
+        3
+      ],
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "legend_labels": [
+            "Sales"
+          ],
+          "artist_types": [
+            "patch"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "missing_legend_annotation",
+      "failure_family": "figure_local_annotation",
+      "repairability": "auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_improvement": "partial_or_full_pass"
+    }
+  },
+  {
+    "case_id": "small-fail-wrong-subplot-count",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nfig, axes = plt.subplots(1, 2, figsize=(4, 3))\nfig.suptitle(\"Revenue Dashboard\")\naxes[0].bar([key for key, value in items], [value for key, value in items], label=\"Sales\")\naxes[0].set_title(\"Sales by Category\")\naxes[0].set_xlabel(\"Category\")\naxes[0].set_ylabel(\"Sales\")\naxes[0].text(0, 7, \"lowest\")\naxes[0].legend()\naxes[1].plot([1, 2], [1, 2])\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "figure_title": "Revenue Dashboard",
+      "size_inches": [
+        4,
+        3
+      ],
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "legend_labels": [
+            "Sales"
+          ],
+          "artist_types": [
+            "patch"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "wrong_subplot_count",
+      "failure_family": "figure_structure",
+      "repairability": "route_only",
+      "expected_repair_scope": "structural_regeneration",
+      "expected_improvement": "no_auto_fix"
+    }
+  },
+  {
+    "case_id": "small-fail-wrong-projection-annotation",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nfig, ax = plt.subplots(subplot_kw={\"projection\": \"polar\"})\nax.bar([key for key, value in items], [value for key, value in items], label=\"Sales\")\nax.set_title(\"Sales by Category\")\nax.set_xlabel(\"Category\")\nax.set_ylabel(\"Sales\")\nax.legend()\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "projection": "rectilinear",
+          "legend_labels": [
+            "Sales"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "fail",
+      "failure_mode": "wrong_projection_annotation",
+      "failure_family": "figure_projection_annotation",
+      "repairability": "partially_auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_improvement": "likely_requirement_reduction"
+    }
+  }
+]

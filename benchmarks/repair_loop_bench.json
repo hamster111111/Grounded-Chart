@@ -1,0 +1,156 @@
+[
+  {
+    "case_id": "repair-loop-title-only",
+    "query": "Show total sales by category in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\nfig, ax = plt.subplots()\nax.bar([\"A\", \"B\"], [10, 7])\nax.set_title(\"Wrong Title\")\nax.set_xlabel(\"Category\")\nax.set_ylabel(\"Sales\")\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales"
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "repairable_fail",
+      "failure_mode": "wrong_axis_title",
+      "failure_family": "figure_local_text",
+      "repairability": "auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_repair_rounds_max": 1,
+      "expected_improvement": "full_pass"
+    }
+  },
+  {
+    "case_id": "repair-loop-missing-annotation",
+    "query": "Show total sales by category in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\nfig, ax = plt.subplots()\nax.bar([\"A\", \"B\"], [10, 7], label=\"Sales\")\nax.set_title(\"Sales by Category\")\nax.set_xlabel(\"Category\")\nax.set_ylabel(\"Sales\")\nax.legend()\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sales by Category",
+          "xlabel": "Category",
+          "ylabel": "Sales",
+          "legend_labels": [
+            "Sales"
+          ],
+          "text_contains": [
+            "lowest"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "expected_behavior": "repairable_fail",
+      "failure_mode": "missing_annotation_text",
+      "failure_family": "figure_local_annotation",
+      "repairability": "auto_repairable",
+      "expected_repair_scope": "local_patch",
+      "expected_repair_rounds_max": 1,
+      "expected_improvement": "full_pass"
+    }
+  },
+  {
+    "case_id": "repair-loop-plotly-title-subtitle",
+    "query": "Show a global food security sunburst chart.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code": "import pandas as pd\nimport plotly.express as px\nimport plotly.io as pio\ndf = pd.DataFrame([\n    {'Major Area': 'Asia', 'Regions': 'East', 'Country': 'China', 'Overall score': 70},\n    {'Major Area': 'Europe', 'Regions': 'West', 'Country': 'France', 'Overall score': 80}\n])\nfig = px.sunburst(df, path=['Major Area', 'Regions', 'Country'], values='Overall score', title='Global Performance Hierarchy')\npio.write_image(fig, 'novice_final.png', width=1000, height=1000)\n",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Global Food Security Index, 2020",
+          "projection": "plotly",
+          "text_contains": [
+            "Overall score 0-100, 100 = best environment"
+          ]
+        }
+      ]
+    },
+    "verification_mode": "figure_only",
+    "metadata": {
+      "expected_behavior": "repairable_fail",
+      "failure_mode": "plotly_title_subtitle",
+      "failure_family": "backend_specific_plotly_soft",
+      "repairability": "auto_repairable",
+      "expected_repair_scope": "backend_specific_regeneration",
+      "expected_repair_rounds_max": 1,
+      "expected_improvement": "partial_or_full_pass"
+    }
+  },
+  {
+    "case_id": "repair-loop-groupby-not-auto",
+    "query": "Show total sales by category in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {
+        "category": "A",
+        "sales": 10
+      },
+      {
+        "category": "A",
+        "sales": 15
+      },
+      {
+        "category": "B",
+        "sales": 7
+      }
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\ncategories = [row[\"category\"] for row in rows]\nsales = [row[\"sales\"] for row in rows]\nplt.bar(categories, sales)\n",
+    "metadata": {
+      "expected_behavior": "non_repairable_fail",
+      "failure_mode": "missing_groupby",
+      "failure_family": "data_transformation",
+      "repairability": "diagnose_only",
+      "expected_repair_scope": "data_transformation",
+      "expected_repair_rounds_max": 0,
+      "expected_improvement": "no_auto_fix"
+    }
+  }
+]
