@@ -1,0 +1,488 @@
+[
+  {
+    "case_id": "matplotbench-20-wrong-3d-bar-yticks",
+    "query": "MatPlotBench example 20 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_20\\code_action_deepseek_initial_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "projection": "3d",
+          "xlabel": "X",
+          "ylabel": "Y",
+          "zlabel": "Z",
+          "ytick_labels": [
+            "4",
+            "3",
+            "2",
+            "1"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 20,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_20\\code_action_deepseek_initial_0.py",
+      "gpt4v_score": 40,
+      "reason": "Generated 3D bar plot uses different axis labels and y tick labels than the instruction/ground truth.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_x_label",
+        "wrong_y_label",
+        "wrong_z_label",
+        "wrong_y_tick_labels"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-35-wrong-log-function-titles",
+    "query": "MatPlotBench example 35 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_35\\code_action_deepseek_vis_refined_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 4,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "semilogy",
+          "yscale": "log"
+        },
+        {
+          "axis_index": 1,
+          "title": "semilogx",
+          "xscale": "log"
+        },
+        {
+          "axis_index": 2,
+          "title": "loglog base 3 on x",
+          "xscale": "log",
+          "yscale": "log"
+        },
+        {
+          "axis_index": 3,
+          "title": "Errorbars go negative",
+          "xscale": "log",
+          "yscale": "log",
+          "min_artist_counts": {
+            "collection": 1
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 35,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_35\\code_action_deepseek_vis_refined_0.py",
+      "gpt4v_score": 15,
+      "reason": "The instruction calls for Matplotlib log-scale examples titled semilogy, semilogx, loglog base 3 on x, and Errorbars go negative; generated code uses descriptive replacement titles and uses the wrong fourth-function construction.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_axis_title",
+        "wrong_axis_title",
+        "wrong_axis_title",
+        "wrong_axis_title"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-39-extra-colorbar-axes",
+    "query": "MatPlotBench example 39 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_39\\code_action_deepseek_vis_refined_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 3,
+      "axes": [
+        {
+          "axis_index": 0,
+          "projection": "polar",
+          "artist_counts": {
+            "patch": 17
+          }
+        },
+        {
+          "axis_index": 1,
+          "projection": "polar",
+          "artist_counts": {
+            "patch": 17
+          }
+        },
+        {
+          "axis_index": 2,
+          "projection": "polar",
+          "artist_counts": {
+            "patch": 17
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 39,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_39\\code_action_deepseek_vis_refined_0.py",
+      "gpt4v_score": 20,
+      "reason": "The intended bullseye figure has three polar bullseye panels; generated code adds three extra colorbar axes, so figure composition no longer matches the panel requirement.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_axes_count"
+      ],
+      "previous_repair_scope": "structural_regeneration",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-41-missing-success-label",
+    "query": "MatPlotBench example 41 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_41\\code_action_deepseek_vis_refined_3.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Flow Diagram of a Gadget",
+          "artist_types": [
+            "patch"
+          ],
+          "text_contains": [
+            "Success!"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 41,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_41\\code_action_deepseek_vis_refined_3.py",
+      "gpt4v_score": 20,
+      "reason": "The simple instruction says the final phase Success! must be distinctively highlighted, but the generated Sankey text reaches Hurray! without a Success! annotation.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "missing_annotation_text"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-48-wrong-histogram-order-and-extra-colorbars",
+    "query": "MatPlotBench example 48 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_48\\code_action_deepseek_vis_refined_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 3,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "1D Random Walk with Hidden Cosine Signal",
+          "artist_types": [
+            "line"
+          ]
+        },
+        {
+          "axis_index": 1,
+          "title": "2D Histogram (Log Color Scale)",
+          "artist_types": [
+            "image"
+          ]
+        },
+        {
+          "axis_index": 2,
+          "title": "2D Histogram (Linear Color Scale)",
+          "artist_types": [
+            "image"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 48,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_48\\code_action_deepseek_vis_refined_0.py",
+      "gpt4v_score": 20,
+      "reason": "The instruction asks for three rows: series, log-color histogram, linear-color histogram. Generated code puts the linear histogram before the log histogram and creates two extra colorbar axes, giving five axes.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_axes_count",
+        "wrong_axis_title",
+        "wrong_axis_title"
+      ],
+      "previous_repair_scope": "structural_regeneration",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-58-wrong-eventplot-orientation-counts",
+    "query": "MatPlotBench example 58 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_58\\code_action_deepseek_vis_refined_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 4,
+      "figure_title": "Event Plot Visualization",
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Horizontal Event Plot (Random Data)",
+          "artist_counts": {
+            "collection": 8
+          }
+        },
+        {
+          "axis_index": 1,
+          "title": "Vertical Event Plot (Random Data)",
+          "artist_counts": {
+            "collection": 8
+          }
+        },
+        {
+          "axis_index": 2,
+          "title": "Horizontal Event Plot (Gamma Data, shape=5)",
+          "artist_types": [
+            "collection"
+          ]
+        },
+        {
+          "axis_index": 3,
+          "title": "Vertical Event Plot (Gamma Data, shape=5)",
+          "artist_types": [
+            "collection"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 58,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_58\\code_action_deepseek_vis_refined_0.py",
+      "gpt4v_score": 20,
+      "reason": "The first row should use an 8x70 random array: horizontal eventplot should expose 8 event groups and vertical eventplot should preserve the same 8 group count. Generated code transposes one panel into 70 collections.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_artist_count"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-59-wrong-bar-cardinality",
+    "query": "MatPlotBench example 59 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "figure_title": "Advanced Transformations Demo",
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Scaled & Rotated Bar Plot",
+          "artist_counts": {
+            "patch": 4
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 59,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+      "gpt4v_score": 0,
+      "reason": "The instruction specifies bar x-values 1,2,3,4 with y-values 4,3,2,4. Generated code plots five bars with different values, which is visible as a patch-count mismatch on the first panel.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_artist_count"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-71-wrong-zoom-layout",
+    "query": "MatPlotBench example 71 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_71\\code_action_deepseek_vis_refined_3.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 3,
+      "figure_title": "Compound Plot with Zoom Effect",
+      "axes": [
+        {
+          "axis_index": 0,
+          "bounds": [
+            0.125,
+            0.53,
+            0.3523,
+            0.35
+          ]
+        },
+        {
+          "axis_index": 1,
+          "bounds": [
+            0.5477,
+            0.53,
+            0.3523,
+            0.35
+          ]
+        },
+        {
+          "axis_index": 2,
+          "bounds": [
+            0.125,
+            0.11,
+            0.775,
+            0.35
+          ],
+          "text_contains": [
+            "Zoom 1",
+            "Zoom 2"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 71,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_71\\code_action_deepseek_vis_refined_3.py",
+      "gpt4v_score": 20,
+      "reason": "The instruction requires two zoomed panels side by side above the main plot. Generated code stacks the zoom panels vertically, which is caught by expected axis bounds.",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_axis_layout",
+        "wrong_axis_layout",
+        "wrong_axis_layout"
+      ],
+      "previous_repair_scope": "local_patch",
+      "previous_exception_type": null
+    }
+  },
+  {
+    "case_id": "matplotbench-81-sankey-structure-mismatch",
+    "query": "MatPlotBench example 81 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_81\\code_action_deepseek_vis_refined_3.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Sankey Diagram: Flow from source to target",
+          "text_contains": [
+            "source",
+            "target"
+          ],
+          "artist_types": [
+            "patch"
+          ],
+          "min_artist_counts": {
+            "patch": 2
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 81,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_81\\code_action_deepseek_vis_refined_3.py",
+      "gpt4v_score": 20,
+      "reason": "After enabling execution in the source workspace, this case no longer fails on missing data. It fails because the generated Matplotlib Sankey code passes an unsupported trunkcolor argument, causing AttributeError before any usable figure is produced.",
+      "expected_failure_family": "generated_code_runtime_bug",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "error",
+      "previous_error_codes": [
+        "execution_error"
+      ],
+      "previous_repair_scope": null,
+      "previous_exception_type": "AttributeError"
+    }
+  },
+  {
+    "case_id": "matplotbench-90-plotly-title-mismatch",
+    "query": "MatPlotBench example 90 smoke case.",
+    "schema": {
+      "columns": {}
+    },
+    "rows": [],
+    "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_90\\code_action_deepseek_vis_refined_0.py",
+    "verification_mode": "figure_only",
+    "figure_requirements": {
+      "axes_count": 1,
+      "axes": [
+        {
+          "axis_index": 0,
+          "title": "Global Food Security Index, 2020",
+          "projection": "plotly",
+          "artist_types": [
+            "sunburst"
+          ],
+          "text_contains": [
+            "Overall score 0-100, 100 = best environment"
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "benchmark": "MatPlotBench",
+      "native_id": 90,
+      "source_code": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_90\\code_action_deepseek_vis_refined_0.py",
+      "gpt4v_score": 0,
+      "reason": "With data staged and minimal Plotly tracing enabled, this generated sunburst now executes, but its title/subtitle semantics diverge from the instruction: it uses a different title and omits the requested subtitle annotation.",
+      "expected_failure_family": "plotly_structure_or_title",
+      "source_failure_report": "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+      "previous_status": "failed",
+      "previous_error_codes": [
+        "wrong_axis_title",
+        "missing_annotation_text"
+      ],
+      "previous_repair_scope": "backend_specific_regeneration",
+      "previous_exception_type": null
+    }
+  }
+]
