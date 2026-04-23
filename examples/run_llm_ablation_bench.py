@@ -10,6 +10,7 @@ from grounded_chart import (
     LLMRepairer,
     OpenAICompatibleLLMClient,
     RuleBasedRepairer,
+    TieredRepairer,
     load_ablation_run_config,
     load_ablation_run_config_from_env,
 )
@@ -77,6 +78,25 @@ def build_parser(config: AblationRunConfig):
 
 
 def build_repairer(config: AblationRunConfig):
+    if config.repair_backend == "tiered":
+        llm_repairer = LLMRepairer(build_client(config.repair_provider, role="repair"))
+        if config.repair_tier_mode == "llm_only":
+            return TieredRepairer(
+                deterministic_repairer=RuleBasedRepairer(),
+                llm_repairer=llm_repairer,
+                llm_scopes=(
+                    "local_patch",
+                    "data_transformation",
+                    "structural_regeneration",
+                    "backend_specific_regeneration",
+                ),
+            )
+        if config.repair_tier_mode == "hybrid":
+            return TieredRepairer(
+                deterministic_repairer=RuleBasedRepairer(),
+                llm_repairer=llm_repairer,
+            )
+        return RuleBasedRepairer()
     if config.repair_backend == "llm":
         return LLMRepairer(build_client(config.repair_provider, role="repair"))
     return RuleBasedRepairer()

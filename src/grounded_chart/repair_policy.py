@@ -28,6 +28,7 @@ class RuleBasedRepairPlanner:
     """Map verifier errors into a scope-controlled repair plan."""
 
     LOCAL_ERRORS = {
+        "execution_error",
         "wrong_order",
         "wrong_chart_type",
         "wrong_axis_label",
@@ -108,7 +109,7 @@ class RuleBasedRepairPlanner:
                 repair_level=1,
                 scope="local_patch",
                 target_error_codes=tuple(sorted(codes)),
-                allowed_edits=("smallest relevant code region",),
+                allowed_edits=("smallest relevant code region", "runtime-unsafe plotting kwargs or calls"),
                 forbidden_edits=("data loading", "unrelated data transformations", "unrelated styling"),
                 reason="Only localized presentation or encoding requirements failed.",
             )

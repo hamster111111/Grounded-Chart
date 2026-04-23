@@ -1387,6 +1387,359 @@ Goal:
 
 - determine whether this is strong enough for EMNLP main, Findings, or should be pivoted
 
+## 8.5 Current Benchmark Reading
+
+The current benchmark runs already support a useful framework-level reading, even before introducing a stronger LLM repairer.
+
+The main lesson is that GroundedChart should not be framed as "a chart agent that fixes benchmark cases." The evidence so far supports a narrower and more defensible claim:
+
+> GroundedChart is strongest when requirement failures are localizable, verifiable, and repairable within a bounded scope. It is weaker on structural subplot reorganization and other global figure rewrites.
+
+### Current Empirical Signals
+
+On the current MatPlotBench failed-task mini-bench:
+
+- the original failed subset starts at `0/10` pass, with `1` execution error
+- the current bounded-repair run reaches `8/10` pass, with `0` remaining execution errors
+
+The remaining failures are not random. They concentrate on structural figure-level issues:
+
+- subplot semantic ordering / role assignment
+- precise multi-panel layout alignment
+
+This is useful because it shows that the framework is not just improving by chance. It improves strongly on some requirement families and remains weak on others.
+
+The Plotly smoke run shows a related pattern:
+
+- the framework already handles a meaningful portion of Plotly cases through backend-aware verification
+- the main unresolved Plotly errors are still concentrated in data/value mismatches rather than superficial labeling only
+
+This suggests that backend awareness is necessary, but backend-specific handling alone is not the main research story.
+
+### What The Benchmarks Already Support
+
+The current benchmark evidence supports the following framework claims:
+
+1. **Requirement-level failure decomposition is working**
+
+The system distinguishes between:
+
+- axis label / title failures
+- annotation failures
+- axes-count and composition failures
+- artist-count failures
+- layout failures
+- runtime execution failures
+
+This is important because it means the framework is producing structured failure attribution rather than a single opaque pass/fail decision.
+
+2. **Localized fidelity violations are a real strength**
+
+The current runs show consistent recovery on cases whose failures are local and requirement-grounded, such as:
+
+- wrong labels and titles
+- wrong tick labels
+- missing required text
+- certain runtime compatibility failures
+- some backend-specific title/subtitle mismatches
+
+This is exactly the region where bounded repair is scientifically meaningful: the failed requirement is explicit, the verifier localizes it, and the repair can be limited to a small code region.
+
+3. **Execution failures can be brought into the same evidence pipeline**
+
+The current framework no longer needs to treat execution errors as an entirely separate class of benchmark failures. At least some runtime failures can be:
+
+- captured as explicit failure signals
+- mapped into repair scope
+- rerun under the same verification loop
+
+This is a framework contribution, not just a benchmark convenience, because it extends the evidence chain to runtime compatibility errors.
+
+4. **Backend differences are already visible and should remain explicit**
+
+The current runs show that backend support tiers matter:
+
+- Matplotlib 2D behaves like a native hard-verification backend
+- Plotly behaves more like a spec-accessible soft-verification backend
+- 3D plots currently remain partially supported
+
+This means the framework should continue modeling backend support explicitly instead of pretending all plotting backends are equally verifiable.
+
+### What The Benchmarks Do Not Yet Support
+
+The current evidence does **not** support the following stronger claims:
+
+- that GroundedChart is generally strong on arbitrary multi-panel figure restructuring
+- that bounded rule repair can solve complex subplot reordering
+- that the current framework is already strong on data-transformation-heavy failures
+- that the main research contribution is "repair" by itself
+
+These unsupported claims are important to exclude, because the remaining failures already show the limits of the current approach.
+
+### Current Capability Boundary
+
+A practical summary of the framework boundary is:
+
+- **Strong region**
+  - requirement-grounded local verification
+  - bounded local repair
+  - runtime compatibility recovery for a subset of cases
+  - backend-aware verification behavior
+
+- **Weak region**
+  - structural subplot regeneration
+  - multi-panel semantic reordering
+  - precise layout reconstruction
+  - large global rewrites that exceed localized evidence
+
+This boundary is not a weakness in itself. It is useful because it tells us what the framework is actually about.
+
+### Research Implication
+
+The benchmark evidence suggests that the strongest paper framing is not:
+
+> a powerful chart-repair system
+
+but instead:
+
+> an evidence-grounded framework for chart requirement verification and bounded local recovery
+
+where:
+
+- verification is requirement-level
+- repair is scope-bounded
+- deterministic execution carries numerical and structural truth where possible
+- benchmark analysis is reported by error family rather than only aggregate pass rate
+
+### Immediate Design Consequence
+
+Because of the current benchmark evidence, future work should prioritize:
+
+- better error-family analysis
+- cleaner separation between core repair and backend adapter logic
+- stronger reporting by requirement family
+- a principled handoff from local repair to higher-level structural regeneration
+
+Future work should **not** prioritize:
+
+- chasing every remaining failed case with task-specific rule patches
+- presenting benchmark-specific repairs as if they were framework-level mechanisms
+- overstating current support for multi-panel structural correction
+
+## 8.6 Priority Checklist
+
+The design document is broader than the current implementation. To keep the project aligned with a credible EMNLP-style framing, the missing pieces should be prioritized as follows.
+
+### P0: Must-Have Before Strong Framework Claims
+
+These are the highest-priority gaps. Without them, the framework can run, but the paper-level claim remains weaker than the document suggests.
+
+1. **Requirement provenance must become parser-native**
+
+Current limitation:
+
+- the parser mainly outputs `ChartIntentPlan`
+- `RequirementNode` is mostly reconstructed later from that plan
+- source spans, assumptions, and requirement status are not first-class parser outputs
+
+Needed:
+
+- parser output should directly produce requirement candidates with:
+  - `source_span`
+  - `status` in `{explicit, inferred, assumed, ambiguous, unsupported}`
+  - optional `assumption`
+  - confidence at the requirement level
+
+Reason:
+
+- this is necessary for traceable grounding
+- this is also necessary to distinguish parser mistakes from verifier or repair mistakes
+
+2. **Ambiguity and abstention must be real, not only described**
+
+Current limitation:
+
+- the system almost always forces a plan
+- ambiguity-aware gating is described in the document but not implemented as a true policy
+
+Needed:
+
+- requirement-level abstention
+- pre-verification gating for unsupported / ambiguous requirements
+- explicit reporting of abstained requirements instead of silently forcing defaults
+
+Reason:
+
+- otherwise the framework overclaims certainty under ambiguity
+- this weakens both evidence quality and paper credibility
+
+3. **Intermediate deterministic artifacts must be added**
+
+Current limitation:
+
+- evidence mostly binds expected and actual plot traces
+- the framework does not yet expose intermediate grouped / filtered / sorted artifacts as first-class evidence
+
+Needed:
+
+- expected grouped table
+- expected filtered subset
+- expected sorted result
+- optional program string / artifact hash for deterministic execution
+
+Reason:
+
+- this is central to the design's evidence-grounded claim
+- without intermediate artifacts, evidence remains thinner than the document promises
+
+4. **Requirement-level metrics must replace only aggregate reporting**
+
+Current limitation:
+
+- the current metrics and reports are still dominated by case-level pass/fail and error counts
+
+Needed:
+
+- requirement coverage
+- requirement satisfaction
+- per-family success
+- repair success by failed requirement family
+
+Reason:
+
+- aggregate case pass rate hides partial success
+- the paper framing depends on requirement-level evaluation
+
+5. **Oracle vs predicted requirement-plan evaluation must be separated**
+
+Current limitation:
+
+- parser quality and verifier/repair quality are still entangled in most runs
+
+Needed:
+
+- oracle-plan runs
+- predicted-plan runs
+- explicit attribution of failures to parser vs verifier/repair
+
+Reason:
+
+- without this split, it will be hard to argue where the framework actually helps
+
+### P1: Important For Bench-Driven Analysis
+
+These are the next layer. They are not as foundational as P0, but they are necessary if the benchmark analysis is supposed to guide framework evolution instead of just producing numbers.
+
+1. **Second benchmark or diagnostic set**
+
+Current limitation:
+
+- the strongest current evidence still comes from MatPlotBench-derived cases and a Plotly smoke set
+
+Needed:
+
+- at least one additional benchmark or diagnostic set with different failure structure
+
+Reason:
+
+- one benchmark is not enough to support a strong method claim
+
+2. **Error-family-oriented reporting**
+
+Needed:
+
+- reports grouped by:
+  - data operation
+  - encoding
+  - annotation
+  - figure composition
+  - runtime compatibility
+  - backend-specific limitations
+
+Reason:
+
+- this is the right unit for framework analysis
+- it also stops development from turning into task-by-task patching
+
+3. **Cleaner boundary between core framework and backend adapters**
+
+Current limitation:
+
+- some current repairs mix core local repair with backend-specific compatibility logic
+
+Needed:
+
+- separate:
+  - core requirement-grounded local repair
+  - backend adapter / compatibility repair
+  - experimental or benchmark-specific rules
+
+Reason:
+
+- this makes the method easier to explain and evaluate honestly
+
+4. **Failure taxonomy should become explicit in reports**
+
+Needed:
+
+- standardized reporting for:
+  - parse failure
+  - ambiguous requirement
+  - canonical execution failure
+  - code execution failure
+  - trace extraction failure
+  - requirement violation
+  - repair failure
+
+Reason:
+
+- this is one of the strongest potential framework contributions
+
+### P2: Valuable But Not On The Critical Path
+
+These are useful, but they should not be allowed to distract from the core evidence-grounded story.
+
+1. **Stronger LLM parser**
+
+- useful after oracle/predicted separation is in place
+- not the current bottleneck for defining the framework
+
+2. **Tiered LLM repair**
+
+- useful later for structural and semantic failures
+- should come after the deterministic and reporting boundary is clean
+
+3. **Richer multi-panel / shared-requirement support**
+
+- important eventually
+- but too much investment here too early risks over-expanding the scope before the evidence pipeline is mature
+
+4. **More sophisticated structural regeneration**
+
+- likely needed for hard layout / subplot-role failures
+- but this should come after the framework can clearly explain why local repair stops being appropriate
+
+### Deprioritize For Now
+
+The following should not be a near-term focus:
+
+- chasing remaining benchmark failures one by one
+- adding more task-specific local rules just to improve mini-bench pass rate
+- presenting backend compatibility patches as if they were the core research contribution
+- optimizing for arbitrary multi-panel figure reconstruction before provenance and evidence are fully solid
+
+### Recommended Next Execution Order
+
+If development is guided by the current framework goal, the recommended order is:
+
+1. requirement-provenance parser output
+2. ambiguity / abstain policy
+3. intermediate deterministic artifacts
+4. requirement-level metrics and failure taxonomy
+5. oracle vs predicted evaluation split
+6. second benchmark / diagnostic evidence
+7. only then revisit stronger LLM repair or structural regeneration
+
 ## 9. Non-Goals
 
 For the first serious prototype, do not focus on:

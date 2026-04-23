@@ -86,6 +86,68 @@ plt.bar(df['x'], df['y'])
         self.assertEqual(trace.plot_trace.chart_type, "bar")
         self.assertEqual([(p.x, p.y) for p in trace.plot_trace.points], [("A", 3), ("B", 5)])
 
+    def test_runner_captures_errorbar_artist_type(self):
+        code = """
+import numpy as np
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+x = np.array([1, 2, 3])
+y = np.array([2, 4, 8])
+ax.errorbar(x, y, xerr=0.1 * x, yerr=0.2 * y)
+"""
+        trace = MatplotlibTraceRunner().run_code_with_figure(code)
+        artist_types = [artist.artist_type for artist in trace.figure_trace.axes[0].artists]
+
+        self.assertIn("errorbar", artist_types)
+
+    def test_runner_captures_bar_artist_type(self):
+        code = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.bar(['A', 'B', 'C'], [3, 5, 4], label='Revenue')
+"""
+        trace = MatplotlibTraceRunner().run_code_with_figure(code)
+        artist_types = [artist.artist_type for artist in trace.figure_trace.axes[0].artists]
+
+        self.assertIn("bar", artist_types)
+
+    def test_runner_captures_pie_artist_type(self):
+        code = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.pie([35, 45, 20], labels=['Apples', 'Oranges', 'Bananas'])
+"""
+        trace = MatplotlibTraceRunner().run_code_with_figure(code)
+        artist_types = [artist.artist_type for artist in trace.figure_trace.axes[0].artists]
+
+        self.assertIn("pie", artist_types)
+
+    def test_runner_captures_scatter_artist_type(self):
+        code = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.scatter([1, 2, 3], [4, 5, 6], s=[10, 20, 30])
+"""
+        trace = MatplotlibTraceRunner().run_code_with_figure(code)
+        artist_types = [artist.artist_type for artist in trace.figure_trace.axes[0].artists]
+
+        self.assertIn("scatter", artist_types)
+
+    def test_runner_excludes_colorbar_axes_from_semantic_axes_count(self):
+        code = """
+import numpy as np
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+image = ax.imshow(np.array([[1, 2], [3, 4]]))
+fig.colorbar(image, ax=ax, label='Intensity')
+"""
+        trace = MatplotlibTraceRunner().run_code_with_figure(code)
+
+        self.assertEqual(1, trace.figure_trace.axes_count)
+        self.assertEqual(2, trace.figure_trace.raw["total_axes_count"])
+        self.assertEqual(1, trace.figure_trace.raw["helper_axes_count"])
+        self.assertEqual(("image",), tuple(artist.artist_type for artist in trace.figure_trace.axes[0].artists))
+
     def test_runner_exposes_file_path_to_script(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

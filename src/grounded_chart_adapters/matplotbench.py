@@ -23,6 +23,11 @@ class MatplotBenchRecord:
     data_dir: Path | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def preferred_instruction(self, *, prefer_expert: bool = True) -> str:
+        if prefer_expert and self.expert_instruction:
+            return self.expert_instruction
+        return self.simple_instruction or self.expert_instruction
+
     @property
     def has_external_data(self) -> bool:
         return self.data_dir is not None and self.data_dir.exists()
@@ -64,6 +69,9 @@ class MatplotBenchWorkspaceRecord:
     @property
     def case_id(self) -> str:
         return self.native_record.case_id
+
+    def preferred_instruction(self, *, prefer_expert: bool = True) -> str:
+        return self.native_record.preferred_instruction(prefer_expert=prefer_expert)
 
     @property
     def has_workspace(self) -> bool:

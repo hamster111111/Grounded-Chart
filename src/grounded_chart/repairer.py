@@ -47,6 +47,8 @@ class RuleBasedRepairer:
             hints.append(f"Use chart type '{plan.chart_type}' as requested by the intent plan.")
         if any(code in codes for code in ("wrong_axis_title", "wrong_x_label", "wrong_y_label", "wrong_z_label", "wrong_figure_title")):
             hints.append("Update only the requested title or axis label calls; keep plotted data unchanged.")
+        if "execution_error" in codes:
+            hints.append("Remove or replace only the runtime-unsafe plotting argument or call that caused execution to fail.")
         if any(code in codes for code in ("wrong_x_tick_labels", "wrong_y_tick_labels", "wrong_z_tick_labels")):
             hints.append("Adjust only the requested tick locations or tick labels.")
         if any(code in codes for code in ("wrong_x_scale", "wrong_y_scale", "wrong_z_scale")):
@@ -112,6 +114,51 @@ class LLMRepairer:
             target_error_codes=report.error_codes,
             repair_plan=repair_plan,
             repaired_code=repaired_code,
+        )
+
+
+class TieredRepairer:
+    """Route repairs across deterministic and LLM tiers by scope.
+
+    Default behavior:
+    - local_patch -> deterministic rule-based repair
+    - data/structural/backend-specific -> LLM repair
+    """
+
+    def __init__(
+        self,
+        deterministic_repairer: Repairer | None = None,
+        llm_repairer: Repairer | None = None,
+        llm_scopes: tuple[str, ...] = (
+            "data_transformation",
+            "structural_regeneration",
+            "backend_specific_regeneration",
+        ),
+    ) -> None:
+        self.deterministic_repairer = deterministic_repairer or RuleBasedRepairer()
+        self.llm_repairer = llm_repairer
+        self.llm_scopes = tuple(llm_scopes)
+
+    def propose(self, code: str, plan: ChartIntentPlan, report: VerificationReport) -> RepairPatch:
+        deterministic_patch = self.deterministic_repairer.propose(code, plan, report)
+        repair_plan = deterministic_patch.repair_plan
+        if repair_plan is None or not repair_plan.should_repair:
+            return deterministic_patch
+        if repair_plan.scope in self.llm_scopes and self.llm_repairer is not None:
+            llm_patch = self.llm_repairer.propose(code, plan, report)
+            return RepairPatch(
+                strategy=f"tiered::{llm_patch.strategy}",
+                instruction=llm_patch.instruction,
+                target_error_codes=llm_patch.target_error_codes,
+                repair_plan=llm_patch.repair_plan or repair_plan,
+                repaired_code=llm_patch.repaired_code,
+            )
+        return RepairPatch(
+            strategy=f"tiered::{deterministic_patch.strategy}",
+            instruction=deterministic_patch.instruction,
+            target_error_codes=deterministic_patch.target_error_codes,
+            repair_plan=repair_plan,
+            repaired_code=deterministic_patch.repaired_code,
         )
 
 

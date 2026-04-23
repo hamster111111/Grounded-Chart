@@ -1,11 +1,16 @@
 from pathlib import Path
+import sys
+
+project_root = Path(__file__).resolve().parents[1]
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
 from grounded_chart import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer
 from grounded_chart_adapters import BatchRunner, JsonCaseAdapter, write_batch_report_html
 
 
 def main() -> None:
-    project_root = Path(__file__).resolve().parents[1]
     bench_path = project_root / "benchmarks" / "matplotbench_failed_tasks.json"
     output_dir = project_root / "outputs" / "matplotbench_failed_tasks_repair_loop"
     adapter = JsonCaseAdapter(bench_path)
@@ -13,7 +18,7 @@ def main() -> None:
         parser=HeuristicIntentParser(),
         repairer=RuleBasedRepairer(),
         enable_bounded_repair_loop=True,
-        max_repair_rounds=2,
+        max_repair_rounds=3,
     )
     batch = BatchRunner(pipeline, continue_on_error=True).run(adapter)
 

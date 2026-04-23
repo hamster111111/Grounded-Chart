@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import AxisRequirementSpec, DataPoint, FigureRequirementSpec, FigureTrace, MatplotlibTraceRunner, PlotTrace
+from grounded_chart import ArtistTrace, AxisRequirementSpec, DataPoint, FigureRequirementSpec, FigureTrace, MatplotlibTraceRunner, PlotTrace
 from grounded_chart.schema import AxisTrace
 from grounded_chart.verifier import OperatorLevelVerifier
 
@@ -172,6 +172,34 @@ ax.bar(["A", "B"], [1, 2])
         self.assertFalse(report.ok)
         self.assertIn("wrong_artist_count", report.error_codes)
 
+    def test_hist2d_requirement_accepts_image_artist(self):
+        expected_trace = PlotTrace("unknown", (), source="expected")
+        requirements = FigureRequirementSpec(
+            axes_count=3,
+            axes=(
+                AxisRequirementSpec(axis_index=1, artist_types=("hist2d",)),
+                AxisRequirementSpec(axis_index=2, artist_types=("hist2d",)),
+            ),
+        )
+        actual_figure = FigureTrace(
+            axes=(
+                AxisTrace(index=0, artists=(ArtistTrace(artist_type="line", count=1),)),
+                AxisTrace(index=1, artists=(ArtistTrace(artist_type="image", count=1),)),
+                AxisTrace(index=2, artists=(ArtistTrace(artist_type="image", count=1),)),
+            ),
+            source="matplotlib_figure",
+        )
+
+        report = OperatorLevelVerifier().verify(
+            expected_trace,
+            PlotTrace("unknown", (), source="matplotlib_figure"),
+            expected_figure=requirements,
+            actual_figure=actual_figure,
+            verify_data=False,
+        )
+
+        self.assertTrue(report.ok)
+
     def test_plotly_annotation_text_can_satisfy_figure_requirement(self):
         expected_trace = PlotTrace("pie", (), source="expected")
         requirements = FigureRequirementSpec(
@@ -239,6 +267,69 @@ ax.bar(["A", "B"], [1, 2])
         report = OperatorLevelVerifier().verify(
             expected_trace,
             PlotTrace("bar", (), source="plotly_figure"),
+            expected_figure=requirements,
+            actual_figure=actual_figure,
+            verify_data=False,
+        )
+
+        self.assertTrue(report.ok)
+
+    def test_figure_title_requirement_can_fallback_to_single_axis_title(self):
+        expected_trace = PlotTrace("scatter", (), source="expected")
+        requirements = FigureRequirementSpec(
+            axes_count=1,
+            figure_title="A colored bubble plot",
+        )
+        actual_figure = FigureTrace(
+            title="",
+            axes=(
+                AxisTrace(
+                    index=0,
+                    title="A colored bubble plot",
+                    xlabel="X Variable",
+                    ylabel="Y Variable",
+                ),
+            ),
+            source="matplotlib_figure",
+        )
+
+        report = OperatorLevelVerifier().verify(
+            expected_trace,
+            PlotTrace("scatter", (), source="matplotlib_figure"),
+            expected_figure=requirements,
+            actual_figure=actual_figure,
+            verify_data=False,
+        )
+
+        self.assertTrue(report.ok)
+
+    def test_figure_title_requirement_can_fallback_when_only_one_axis_has_title(self):
+        expected_trace = PlotTrace("scatter", (), source="expected")
+        requirements = FigureRequirementSpec(
+            figure_title="A colored bubble plot",
+        )
+        actual_figure = FigureTrace(
+            title="",
+            axes=(
+                AxisTrace(
+                    index=0,
+                    title="A colored bubble plot",
+                    xlabel="X Variable",
+                    ylabel="Y Variable",
+                ),
+                AxisTrace(
+                    index=1,
+                    title="",
+                    xlabel="",
+                    ylabel="Color",
+                ),
+            ),
+            source="matplotlib_figure",
+        )
+
+        report = OperatorLevelVerifier().verify(
+            expected_trace,
+            PlotTrace("scatter", (), source="matplotlib_figure"),
             expected_figure=requirements,
             actual_figure=actual_figure,
             verify_data=False,

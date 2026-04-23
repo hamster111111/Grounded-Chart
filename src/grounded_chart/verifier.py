@@ -159,16 +159,18 @@ class OperatorLevelVerifier:
                     message="Actual figure has a different number of axes than required.",
                     expected=expected.axes_count,
                     actual=actual.axes_count,
+                    requirement_id=self._first_requirement_id(expected.provenance.get("axes_count", ())),
                 )
             )
-        if expected.figure_title is not None and not self._same_text(expected.figure_title, actual.title):
+        if expected.figure_title is not None and not self._figure_title_matches(expected.figure_title, actual):
             errors.append(
                 VerificationError(
                     code="wrong_figure_title",
                     operator="figure_title",
                     message="Actual figure title does not match the required figure title.",
                     expected=expected.figure_title,
-                    actual=actual.title,
+                    actual=self._best_available_figure_title(actual),
+                    requirement_id=self._first_requirement_id(expected.provenance.get("figure_title", ())),
                 )
             )
         if expected.size_inches is not None and not self._same_size(expected.size_inches, actual.size_inches):
@@ -180,6 +182,7 @@ class OperatorLevelVerifier:
                     expected=expected.size_inches,
                     actual=actual.size_inches,
                     severity="warning",
+                    requirement_id=self._first_requirement_id(expected.provenance.get("size_inches", ())),
                 )
             )
 
@@ -222,6 +225,7 @@ class OperatorLevelVerifier:
                         message=f"Actual axis {field_name} does not match the required value.",
                         expected=expected_value,
                         actual=getattr(actual, field_name),
+                        requirement_id=self._first_requirement_id(expected.provenance.get(field_name, ())),
                     )
                 )
 
@@ -234,6 +238,9 @@ class OperatorLevelVerifier:
                         message="A required legend label is missing.",
                         expected=label,
                         actual=list(actual.legend_labels),
+                        requirement_id=self._first_requirement_id(
+                            expected.provenance.get(f"legend_label:{label}", expected.provenance.get("legend_labels", ()))
+                        ),
                     )
                 )
 
@@ -252,6 +259,7 @@ class OperatorLevelVerifier:
                         message=f"Actual axis {field_name} do not match the required tick labels.",
                         expected=list(expected_ticks),
                         actual=list(getattr(actual, field_name)),
+                        requirement_id=self._first_requirement_id(expected.provenance.get(field_name, ())),
                     )
                 )
 
@@ -263,12 +271,13 @@ class OperatorLevelVerifier:
                     message="Actual axis position/layout does not match the required bounds.",
                     expected=list(expected.bounds),
                     actual=list(actual.bounds) if actual.bounds is not None else None,
+                    requirement_id=self._first_requirement_id(expected.provenance.get("bounds", ())),
                 )
             )
 
         actual_artist_types = tuple(artist.artist_type for artist in actual.artists)
         for artist_type in expected.artist_types:
-            if artist_type not in actual_artist_types:
+            if not self._artist_type_matches(artist_type, actual_artist_types):
                 errors.append(
                     VerificationError(
                         code="missing_artist_type",
@@ -276,6 +285,9 @@ class OperatorLevelVerifier:
                         message="A required visual artist type is missing.",
                         expected=artist_type,
                         actual=list(actual_artist_types),
+                        requirement_id=self._first_requirement_id(
+                            expected.provenance.get(f"artist_type:{artist_type}", expected.provenance.get("artist_types", ()))
+                        ),
                     )
                 )
 
@@ -293,6 +305,9 @@ class OperatorLevelVerifier:
                         message="An axis has a different number of visual artists than required.",
                         expected={artist_type: expected_count},
                         actual={artist_type: actual_count},
+                        requirement_id=self._first_requirement_id(
+                            expected.provenance.get(f"artist_count:{artist_type}", expected.provenance.get("artist_counts", ()))
+                        ),
                     )
                 )
         for artist_type, minimum in expected.min_artist_counts.items():
@@ -305,6 +320,9 @@ class OperatorLevelVerifier:
                         message="An axis has fewer visual artists than required.",
                         expected={artist_type: minimum},
                         actual={artist_type: actual_count},
+                        requirement_id=self._first_requirement_id(
+                            expected.provenance.get(f"min_artist_count:{artist_type}", expected.provenance.get("min_artist_counts", ()))
+                        ),
                     )
                 )
 
@@ -317,6 +335,9 @@ class OperatorLevelVerifier:
                         message="A required annotation/text string is missing from the axis.",
                         expected=text,
                         actual=list(actual.texts),
+                        requirement_id=self._first_requirement_id(
+                            expected.provenance.get(f"text:{text}", expected.provenance.get("text_contains", ()))
+                        ),
                     )
                 )
         return errors
@@ -324,9 +345,38 @@ class OperatorLevelVerifier:
     def _same_text(self, expected: str, actual: str) -> bool:
         return str(expected).strip().lower() == str(actual).strip().lower()
 
+    def _figure_title_matches(self, expected: str, actual: FigureTrace) -> bool:
+        candidates = [actual.title]
+        axis_titles = [axis.title for axis in actual.axes if str(axis.title).strip()]
+        normalized_axis_titles = {str(title).strip().lower() for title in axis_titles}
+        if len(normalized_axis_titles) == 1 and axis_titles:
+            candidates.append(axis_titles[0])
+        return any(self._same_text(expected, candidate) for candidate in candidates if str(candidate).strip())
+
+    def _best_available_figure_title(self, actual: FigureTrace) -> str:
+        if str(actual.title).strip():
+            return actual.title
+        axis_titles = [axis.title for axis in actual.axes if str(axis.title).strip()]
+        normalized_axis_titles = {str(title).strip().lower() for title in axis_titles}
+        if len(normalized_axis_titles) == 1 and axis_titles:
+            return axis_titles[0]
+        return actual.title
+
     def _contains_text(self, expected: str, actual_values: tuple[str, ...]) -> bool:
         expected_normalized = str(expected).strip().lower()
         return any(expected_normalized in str(actual).strip().lower() for actual in actual_values)
+
+    def _artist_type_matches(self, expected: str, actual_artist_types: tuple[str, ...]) -> bool:
+        actual_set = {str(artist_type).strip().lower() for artist_type in actual_artist_types}
+        return bool(actual_set.intersection(self._artist_type_aliases(expected)))
+
+    def _artist_type_aliases(self, artist_type: str) -> set[str]:
+        normalized = str(artist_type).strip().lower()
+        aliases = {
+            "hist2d": {"hist2d", "image"},
+            "heatmap": {"heatmap", "image"},
+        }
+        return aliases.get(normalized, {normalized})
 
     def _same_size(self, expected: tuple[float, float], actual: tuple[float, float] | None) -> bool:
         if actual is None:
@@ -337,6 +387,9 @@ class OperatorLevelVerifier:
         normalized_expected = tuple(item.strip().lower() for item in expected if item.strip())
         normalized_actual = tuple(item.strip().lower() for item in actual if item.strip())
         return normalized_expected == normalized_actual
+
+    def _first_requirement_id(self, requirement_ids: tuple[str, ...]) -> str | None:
+        return requirement_ids[0] if requirement_ids else None
 
     def _same_bounds(self, expected: tuple[float, float, float, float], actual: tuple[float, float, float, float] | None) -> bool:
         if actual is None:

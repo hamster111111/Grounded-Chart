@@ -11,11 +11,18 @@ from grounded_chart.backend import (
     infer_backend_profile,
 )
 from grounded_chart.config import AblationRunConfig, load_ablation_run_config, load_ablation_run_config_from_env
-from grounded_chart.evidence import build_evidence_graph, build_requirement_plan, infer_requirement_id
+from grounded_chart.evidence import (
+    attach_figure_requirements,
+    build_evidence_graph,
+    build_requirement_plan,
+    derive_expected_figure,
+    infer_requirement_id,
+    merge_expected_figure_specs,
+)
 from grounded_chart.intent_parser import HeuristicIntentParser, IntentParser, LLMIntentParser
 from grounded_chart.llm import LLMClient, OpenAICompatibleConfig, OpenAICompatibleLLMClient, extract_json_object
 from grounded_chart.pipeline import GroundedChartPipeline
-from grounded_chart.repairer import LLMRepairer, Repairer, RuleBasedRepairer
+from grounded_chart.repairer import LLMRepairer, Repairer, RuleBasedRepairer, TieredRepairer
 from grounded_chart.repair_policy import RepairPlan, RuleBasedRepairPlanner
 from grounded_chart.requirements import (
     Artifact,
@@ -35,6 +42,7 @@ from grounded_chart.schema import (
     FigureTrace,
     FilterSpec,
     MeasureSpec,
+    ParsedRequirementBundle,
     PipelineResult,
     PlotTrace,
     RepairAttempt,
@@ -54,6 +62,7 @@ __all__ = [
     "AxisTrace",
     "AblationRunConfig",
     "BackendProfile",
+    "attach_figure_requirements",
     "build_evidence_graph",
     "build_requirement_plan",
     "CanonicalExecutor",
@@ -67,6 +76,7 @@ __all__ = [
     "FigureTrace",
     "GroundedChartPipeline",
     "HeuristicIntentParser",
+    "derive_expected_figure",
     "infer_backend_name",
     "infer_backend_profile",
     "infer_requirement_id",
@@ -81,10 +91,12 @@ __all__ = [
     "ManualTraceRunner",
     "MatplotlibTraceRunner",
     "MeasureSpec",
+    "merge_expected_figure_specs",
     "OpenAICompatibleConfig",
     "OpenAICompatibleLLMClient",
     "OperatorLevelVerifier",
     "PanelRequirementPlan",
+    "ParsedRequirementBundle",
     "PipelineResult",
     "PlotTrace",
     "PLOTLY_PROFILE",
@@ -97,6 +109,7 @@ __all__ = [
     "RuleBasedRepairPlanner",
     "SortSpec",
     "TableSchema",
+    "TieredRepairer",
     "UNKNOWN_BACKEND_PROFILE",
     "VerificationError",
     "VerificationReport",

@@ -127,6 +127,28 @@ class AdapterReportingTest(unittest.TestCase):
         self.assertIn("panel_0.axis_0.title", case_report.repair_attempts[0]["resolved_requirement_ids"])
         self.assertIn("Sales by Category", case_report.repaired_code)
 
+    def test_batch_report_can_recover_execution_error_via_repair_loop(self):
+        adapter = InMemoryCaseAdapter([self._unsupported_kwarg_case()])
+        pipeline = GroundedChartPipeline(
+            parser=HeuristicIntentParser(),
+            repairer=RuleBasedRepairer(),
+            enable_bounded_repair_loop=True,
+            max_repair_rounds=2,
+        )
+
+        batch = BatchRunner(pipeline, continue_on_error=True).run(adapter)
+        summary = batch.report.summary
+        case_report = batch.report.cases[0]
+
+        self.assertEqual(summary.total_cases, 1)
+        self.assertEqual(summary.completed_cases, 1)
+        self.assertEqual(summary.passed_cases, 1)
+        self.assertEqual(summary.errored_cases, 0)
+        self.assertEqual(case_report.status, "passed")
+        self.assertEqual(case_report.exception_type, "AttributeError")
+        self.assertTrue(case_report.repair_attempts)
+        self.assertNotIn("trunkcolor=", case_report.repaired_code)
+
     def _passing_case(self):
         return ChartCase(
             case_id="pass-aggregate",
@@ -228,6 +250,53 @@ ax.set_ylabel("Sales")
                     ),
                 ),
             ),
+        )
+
+    def _unsupported_kwarg_case(self):
+        return ChartCase(
+            case_id="repair-runtime-kwarg",
+            query="Show a Sankey diagram from source to target.",
+            schema=TableSchema(columns={"source": "str", "target": "str"}),
+            rows=(
+                {"source": "source", "target": "target"},
+                {"source": "source", "target": "target"},
+            ),
+            generated_code="""
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.sankey import Sankey
+df = pd.DataFrame(rows)
+link_data = df.groupby(['source', 'target']).size().reset_index(name='weight')
+fig = plt.figure(figsize=(8, 6))
+ax = fig.add_subplot(1, 1, 1, xticks=[], yticks=[])
+sankey = Sankey(ax=ax, scale=0.5, offset=0.0)
+for _, row in link_data.iterrows():
+    sankey.add(
+        flows=[row['weight'], -row['weight']],
+        labels=[row['source'], row['target']],
+        orientations=[0, 0],
+        trunklength=1,
+        trunkcolor='red',
+        patchlabel=row['source'],
+        pathlengths=[0.5, 0.5],
+        color='blue'
+    )
+    break
+sankey.finish()
+plt.title("Sankey Diagram: Flow from source to target")
+""",
+            figure_requirements=FigureRequirementSpec(
+                axes_count=1,
+                axes=(
+                    AxisRequirementSpec(
+                        axis_index=0,
+                        title="Sankey Diagram: Flow from source to target",
+                        text_contains=("source", "target"),
+                        artist_types=("patch",),
+                    ),
+                ),
+            ),
+            verification_mode="figure_only",
         )
 
 

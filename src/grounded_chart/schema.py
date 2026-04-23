@@ -61,6 +61,15 @@ class ChartIntentPlan:
 
 
 @dataclass(frozen=True)
+class ParsedRequirementBundle:
+    """Parser-native chart intent plus traceable requirement nodes."""
+
+    plan: ChartIntentPlan
+    requirement_plan: ChartRequirementPlan
+    raw_response: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DataPoint:
     x: Any
     y: Any
@@ -151,6 +160,7 @@ class AxisRequirementSpec:
     artist_counts: dict[str, int] = field(default_factory=dict)
     min_artist_counts: dict[str, int] = field(default_factory=dict)
     text_contains: tuple[str, ...] = ()
+    provenance: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -161,6 +171,7 @@ class FigureRequirementSpec:
     figure_title: str | None = None
     size_inches: tuple[float, float] | None = None
     axes: tuple[AxisRequirementSpec, ...] = ()
+    provenance: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -227,3 +238,5 @@ class PipelineResult:
     repair: RepairPatch | None = None
     repaired_code: str | None = None
     repair_attempts: tuple[RepairAttempt, ...] = ()
+    execution_exception_type: str | None = None
+    execution_exception_message: str | None = None

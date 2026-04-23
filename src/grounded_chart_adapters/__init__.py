@@ -15,6 +15,12 @@ from grounded_chart_adapters.matplotbench import (
     MatplotBenchWorkspaceRecord,
 )
 from grounded_chart_adapters.memory import InMemoryCaseAdapter
+from grounded_chart_adapters.requirement_extraction import (
+    RequirementExtractionCaseReport,
+    RequirementExtractionReport,
+    RequirementExtractionRunner,
+    RequirementExtractionSummary,
+)
 from grounded_chart_adapters.reporting import BatchReport, BatchSummary, CaseReport
 
 __all__ = [
@@ -32,5 +38,9 @@ __all__ = [
     "MatplotBenchRecord",
     "MatplotBenchWorkspaceAdapter",
     "MatplotBenchWorkspaceRecord",
+    "RequirementExtractionCaseReport",
+    "RequirementExtractionReport",
+    "RequirementExtractionRunner",
+    "RequirementExtractionSummary",
     "write_batch_report_html",
 ]

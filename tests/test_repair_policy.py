@@ -1,6 +1,16 @@
 import unittest
 
-from grounded_chart import AxisRequirementSpec, DataPoint, FigureRequirementSpec, FigureTrace, PlotTrace, RuleBasedRepairPlanner, RuleBasedRepairer
+from grounded_chart import (
+    AxisRequirementSpec,
+    DataPoint,
+    FigureRequirementSpec,
+    FigureTrace,
+    PlotTrace,
+    RuleBasedRepairPlanner,
+    RuleBasedRepairer,
+    VerificationError,
+    VerificationReport,
+)
 from grounded_chart.verifier import OperatorLevelVerifier
 
 
@@ -20,6 +30,33 @@ class RepairPolicyTest(unittest.TestCase):
         plan = RuleBasedRepairPlanner().plan(report)
         self.assertEqual(plan.repair_level, 0)
         self.assertFalse(plan.should_repair)
+
+    def test_execution_error_maps_to_local_patch(self):
+        expected = PlotTrace("bar", (), source="expected")
+        actual = PlotTrace("unknown", (), source="execution_error")
+        report = VerificationReport(
+            ok=False,
+            errors=(
+                VerificationError(
+                    code="execution_error",
+                    message="PathPatch.set() got an unexpected keyword argument 'trunkcolor'",
+                    expected=None,
+                    actual="AttributeError",
+                    operator="execution",
+                    requirement_id="panel_0.chart_type",
+                    severity="error",
+                ),
+            ),
+            expected_trace=expected,
+            actual_trace=actual,
+            expected_figure=None,
+            actual_figure=None,
+        )
+
+        plan = RuleBasedRepairPlanner().plan(report)
+
+        self.assertEqual(plan.repair_level, 1)
+        self.assertEqual(plan.scope, "local_patch")
 
     def test_plotly_soft_backend_maps_to_backend_specific_regeneration(self):
         expected = PlotTrace("bar", (), source="expected")

@@ -247,7 +247,9 @@ class MatplotlibTraceRunner:
 
     def _figure_trace(self, plt: Any) -> FigureTrace:
         fig = plt.gcf()
-        axes = tuple(self._axis_trace(index, ax) for index, ax in enumerate(fig.axes))
+        semantic_axes = [ax for ax in fig.axes if not self._is_helper_axis(ax)]
+        helper_axes = [ax for ax in fig.axes if self._is_helper_axis(ax)]
+        axes = tuple(self._axis_trace(index, ax) for index, ax in enumerate(semantic_axes))
         width, height = fig.get_size_inches()
         title = ""
         if getattr(fig, "_suptitle", None) is not None:
@@ -257,6 +259,11 @@ class MatplotlibTraceRunner:
             size_inches=(round(float(width), 4), round(float(height), 4)),
             axes=axes,
             source="matplotlib_figure",
+            raw={
+                "total_axes_count": len(fig.axes),
+                "helper_axes_count": len(helper_axes),
+                "helper_axis_labels": [str(ax.get_label() or "") for ax in helper_axes],
+            },
         )
 
     def _plotly_plot_trace(self, fig: Any, trace_types: tuple[str, ...]) -> PlotTrace:
@@ -661,10 +668,33 @@ class MatplotlibTraceRunner:
                     count=len(line.get_xdata()) if hasattr(line, "get_xdata") else None,
                 )
             )
+        for container in getattr(ax, "containers", ()):
+            container_name = type(container).__name__
+            if container_name == "ErrorbarContainer":
+                data_line = container.lines[0] if getattr(container, "lines", None) else None
+                label = self._clean_label(container.get_label() if hasattr(container, "get_label") else None)
+                count = len(data_line.get_xdata()) if data_line is not None and hasattr(data_line, "get_xdata") else None
+                artists.append(ArtistTrace(artist_type="errorbar", label=label, count=count))
+                continue
+            if container_name == "BarContainer":
+                label = self._clean_label(container.get_label() if hasattr(container, "get_label") else None)
+                count = len(container) if hasattr(container, "__len__") else None
+                artists.append(ArtistTrace(artist_type="bar", label=label, count=count))
         for collection in getattr(ax, "collections", ()):
             offsets = collection.get_offsets() if hasattr(collection, "get_offsets") else ()
             count = len(offsets) if hasattr(offsets, "__len__") else None
-            artists.append(ArtistTrace(artist_type="collection", label=self._clean_label(collection.get_label()), count=count))
+            collection_type = type(collection).__name__
+            artist_type = "scatter" if collection_type == "PathCollection" and count not in {None, 0} else "collection"
+            artists.append(ArtistTrace(artist_type=artist_type, label=self._clean_label(collection.get_label()), count=count))
+        wedge_count = len(
+            [
+                patch_item
+                for patch_item in getattr(ax, "patches", ())
+                if patch_item.get_visible() and type(patch_item).__name__ == "Wedge"
+            ]
+        )
+        if wedge_count:
+            artists.append(ArtistTrace(artist_type="pie", count=wedge_count))
         patch_count = len([patch_item for patch_item in getattr(ax, "patches", ()) if patch_item.get_visible()])
         if patch_count:
             artists.append(ArtistTrace(artist_type="patch", count=patch_count))
@@ -675,6 +705,12 @@ class MatplotlibTraceRunner:
         if image_count:
             artists.append(ArtistTrace(artist_type="image", count=image_count))
         return artists
+
+    def _is_helper_axis(self, ax: Any) -> bool:
+        label = str(ax.get_label() or "").strip().lower()
+        if label == "<colorbar>":
+            return True
+        return any(type(child).__name__ == "_ColorbarSpine" for child in ax.get_children())
 
     def _clean_label(self, label: Any) -> str | None:
         if label is None:

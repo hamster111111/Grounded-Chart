@@ -195,6 +195,8 @@ def case_report_from_result(result: AdapterRunResult) -> CaseReport:
         repair_instruction=pipeline_result.repair.instruction if pipeline_result.repair else None,
         repaired_code=pipeline_result.repaired_code,
         repair_attempts=tuple(_repair_attempt_to_dict(attempt) for attempt in pipeline_result.repair_attempts),
+        exception_type=pipeline_result.execution_exception_type,
+        exception_message=pipeline_result.execution_exception_message,
         case_metadata=_jsonable(result.case.metadata),
         run_metadata=_jsonable(result.metadata),
     )

@@ -63,5 +63,35 @@ class BatchRunner:
             except Exception as exc:
                 if not self.continue_on_error:
                     raise
-                case_reports.append(case_report_from_exception(case, exc))
+                if self.pipeline.enable_bounded_repair_loop and self.pipeline.repairer is not None:
+                    source_path = case.metadata.get("source_code")
+                    execution_dir = case.metadata.get("execution_dir")
+                    if execution_dir is None and source_path:
+                        execution_dir = str(Path(source_path).resolve().parent)
+                    pipeline_result = self.pipeline.run_with_execution_error(
+                        query=case.query,
+                        schema=case.schema,
+                        rows=case.rows,
+                        generated_code=case.generated_code,
+                        execution_exception=exc,
+                        expected_figure=case.figure_requirements,
+                        verify_data=case.verification_mode == "full",
+                        execution_dir=execution_dir,
+                        file_path=source_path,
+                    )
+                    run_result = AdapterRunResult(
+                        case=case,
+                        pipeline_result=pipeline_result,
+                        metadata={
+                            "initial_exception_type": type(exc).__name__,
+                            "initial_exception_message": str(exc),
+                        },
+                    )
+                    if pipeline_result.report.ok:
+                        run_results.append(run_result)
+                        case_reports.append(case_report_from_result(run_result))
+                    else:
+                        case_reports.append(case_report_from_result(run_result))
+                else:
+                    case_reports.append(case_report_from_exception(case, exc))
         return BatchRunResult(run_results=tuple(run_results), report=BatchReport.from_case_reports(case_reports))
