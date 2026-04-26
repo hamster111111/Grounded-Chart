@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -169,6 +169,7 @@ class JsonCaseAdapter:
                 artist_counts={str(key): int(value) for key, value in axis.get("artist_counts", {}).items()},
                 min_artist_counts={str(key): int(value) for key, value in axis.get("min_artist_counts", {}).items()},
                 text_contains=tuple(axis.get("text_contains", ())),
+                source_spans=dict(axis.get("source_spans", {})),
             )
             for axis in raw.get("axes", ())
         )
@@ -178,6 +179,8 @@ class JsonCaseAdapter:
             figure_title=raw.get("figure_title"),
             size_inches=tuple(float(item) for item in size_inches) if size_inches is not None else None,
             axes=axes,
+            source_spans=dict(raw.get("source_spans", {})),
+            artifact_contracts=tuple(dict(item) for item in raw.get("artifact_contracts", ()) if isinstance(item, dict)),
         )
 
     def _parsed_requirements(self, raw: dict[str, Any], *, schema: TableSchema) -> ParsedRequirementBundle | None:

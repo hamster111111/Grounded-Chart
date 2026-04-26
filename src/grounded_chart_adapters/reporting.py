@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
@@ -553,6 +553,7 @@ def _figure_requirement_to_dict(figure: Any) -> dict[str, Any] | None:
         "figure_title": figure.figure_title,
         "size_inches": list(figure.size_inches) if figure.size_inches else None,
         "source_spans": dict(getattr(figure, "source_spans", {})),
+        "artifact_contracts": _jsonable(getattr(figure, "artifact_contracts", ())),
         "axes": [
             {
                 "axis_index": axis.axis_index,

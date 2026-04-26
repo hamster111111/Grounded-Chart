@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 import json
 import tempfile
 from pathlib import Path
@@ -104,6 +104,55 @@ plt.bar(categories, sales)
 
         self.assertEqual(1, len(loaded))
         self.assertEqual("bom-case", loaded[0].case_id)
+
+    def test_json_adapter_loads_figure_artifact_contracts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            code_path = root / "case_code.py"
+            code_path.write_text("import matplotlib.pyplot as plt\nplt.bar(['A'], [1])\n", encoding="utf-8")
+            cases_path = root / "cases.json"
+            cases_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "case_id": "visual-contract-case",
+                            "query": "Draw a connected stacked bar chart.",
+                            "schema": {"columns": {}},
+                            "rows": [],
+                            "generated_code_path": "case_code.py",
+                            "figure_requirements": {
+                                "axes_count": 1,
+                                "source_spans": {"axes_count": "one subplot"},
+                                "artifact_contracts": [
+                                    {
+                                        "artifact_type": "panel_chart_type",
+                                        "expected": {"chart_type": "stacked_bar"},
+                                        "locator": {"panel_id": "panel_0"},
+                                        "source_requirement_id": "panel_0.chart_type",
+                                        "source_span": "stacked bar chart",
+                                    }
+                                ],
+                                "axes": [
+                                    {
+                                        "axis_index": 0,
+                                        "title": "Summary",
+                                        "source_spans": {"title": "title Summary"},
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = list(JsonCaseAdapter(cases_path).iter_cases())
+
+        figure = loaded[0].figure_requirements
+        self.assertEqual({"axes_count": "one subplot"}, figure.source_spans)
+        self.assertEqual("title Summary", figure.axes[0].source_spans["title"])
+        self.assertEqual("panel_chart_type", figure.artifact_contracts[0]["artifact_type"])
+        self.assertEqual("stacked_bar", figure.artifact_contracts[0]["expected"]["chart_type"])
 
     def test_json_adapter_loads_expected_trace(self):
         with tempfile.TemporaryDirectory() as tmpdir:
