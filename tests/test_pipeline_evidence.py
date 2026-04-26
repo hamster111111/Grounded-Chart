@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 
 from grounded_chart import (
     ArtistTrace,
@@ -14,6 +14,7 @@ from grounded_chart import (
     TableSchema,
 )
 from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.evidence import attach_figure_requirements, merge_expected_figure_specs
 from grounded_chart.schema import AxisTrace, ChartIntentPlan
 
 
@@ -553,7 +554,50 @@ class PipelineEvidenceTest(unittest.TestCase):
         self.assertEqual(requirements["figure.axes_count"].source_span, "1")
         self.assertTrue(any(link.requirement_id == "panel_0.chart_type" for link in result.evidence_graph.links))
         self.assertIn("expected.plot_trace", {artifact.artifact_id for artifact in result.evidence_graph.expected_artifacts})
+        self.assertIn("expected.source_rows", {artifact.artifact_id for artifact in result.evidence_graph.expected_artifacts})
+        self.assertIn("expected.grouped_rows", {artifact.artifact_id for artifact in result.evidence_graph.expected_artifacts})
+        self.assertIn("expected.aggregated_table", {artifact.artifact_id for artifact in result.evidence_graph.expected_artifacts})
+        self.assertIn("expected.sorted_table", {artifact.artifact_id for artifact in result.evidence_graph.expected_artifacts})
         self.assertIn("actual.plot_trace", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.x_values", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.y_values", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.plot_points", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.aggregated_table", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.sorted_table", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        self.assertIn("actual.limited_table", {artifact.artifact_id for artifact in result.evidence_graph.actual_artifacts})
+        actual_artifacts = {artifact.artifact_id: artifact for artifact in result.evidence_graph.actual_artifacts}
+        self.assertEqual(["B", "A"], actual_artifacts["actual.x_values"].payload)
+        self.assertEqual([5, 10], actual_artifacts["actual.y_values"].payload)
+        self.assertEqual(
+            [{"x": "B", "y": 5}, {"x": "A", "y": 10}],
+            actual_artifacts["actual.plot_points"].payload,
+        )
+        self.assertEqual(
+            [{"x": "B", "y": 5}, {"x": "A", "y": 10}],
+            actual_artifacts["actual.aggregated_table"].payload,
+        )
+        self.assertEqual(
+            [{"x": "B", "y": 5, "meta": {}}, {"x": "A", "y": 10, "meta": {}}],
+            actual_artifacts["actual.sorted_table"].payload,
+        )
+        self.assertEqual(
+            [{"x": "B", "y": 5, "meta": {}}, {"x": "A", "y": 10, "meta": {}}],
+            actual_artifacts["actual.limited_table"].payload,
+        )
+        artifacts = {artifact.artifact_id: artifact for artifact in result.evidence_graph.expected_artifacts}
+        self.assertEqual(
+            [{"x": "A", "y": 10.0}, {"x": "B", "y": 5.0}],
+            artifacts["expected.aggregated_table"].payload,
+        )
+        self.assertEqual(
+            [{"x": "B", "y": 5.0, "meta": {}}, {"x": "A", "y": 10.0, "meta": {}}],
+            artifacts["expected.sorted_table"].payload,
+        )
+        links = {link.requirement_id: link for link in result.evidence_graph.links}
+        self.assertEqual("expected.aggregated_table", links["panel_0.aggregation"].expected_artifact_id)
+        self.assertEqual("actual.aggregated_table", links["panel_0.aggregation"].actual_artifact_id)
+        self.assertEqual("expected.sorted_table", links["panel_0.sort"].expected_artifact_id)
+        self.assertEqual("actual.sorted_table", links["panel_0.sort"].actual_artifact_id)
 
     def test_pipeline_evidence_marks_failed_figure_requirement(self):
         pipeline = GroundedChartPipeline(parser=HeuristicIntentParser())
@@ -575,6 +619,27 @@ class PipelineEvidenceTest(unittest.TestCase):
 
         self.assertIn("wrong_axes_count", result.report.error_codes)
         self.assertIn("figure.axes_count", result.evidence_graph.failed_requirement_ids)
+
+    def test_data_point_mismatch_falls_back_to_dimension_requirement_when_no_filter_exists(self):
+        pipeline = GroundedChartPipeline(parser=HeuristicIntentParser())
+        result = pipeline.run(
+            query="Show total sales by category in a bar chart.",
+            schema=TableSchema(columns={"category": "str", "sales": "number"}),
+            rows=(
+                {"category": "A", "sales": 10},
+                {"category": "B", "sales": 5},
+            ),
+            actual_trace=PlotTrace(
+                chart_type="bar",
+                points=(DataPoint("East", 10), DataPoint("West", 5)),
+                source="actual",
+            ),
+        )
+
+        self.assertIn("data_point_not_found", result.report.error_codes)
+        self.assertIn("unexpected_data_point", result.report.error_codes)
+        self.assertIn("panel_0.dimensions", result.evidence_graph.failed_requirement_ids)
+        self.assertNotIn("panel_0.chart_type", result.evidence_graph.failed_requirement_ids)
 
     def test_pipeline_only_enforces_order_for_explicit_sort(self):
         pipeline = GroundedChartPipeline(parser=HeuristicIntentParser())
@@ -609,6 +674,102 @@ class PipelineEvidenceTest(unittest.TestCase):
         self.assertFalse(sorted_result.report.ok)
         self.assertIn("wrong_order", sorted_result.report.error_codes)
 
+    def test_attach_figure_requirements_records_policy_and_source_spans(self):
+        base_plan = ChartRequirementPlan(
+            requirements=(),
+            panels=(PanelRequirementPlan(panel_id="panel_0", chart_type="unknown"),),
+            raw_query="Draw a 4 by 3 inch figure titled Summary.",
+        )
+        expected_figure = FigureRequirementSpec(
+            size_inches=(4.0, 3.0),
+            source_spans={"size_inches": "4 by 3 inch"},
+            axes=(
+                AxisRequirementSpec(
+                    axis_index=0,
+                    title="Summary",
+                    legend_labels=("baseline",),
+                    source_spans={"title": "titled Summary", "legend_labels": "legend label baseline"},
+                ),
+            ),
+        )
+
+        attached = attach_figure_requirements(base_plan, expected_figure)
+        by_id = {requirement.requirement_id: requirement for requirement in attached.requirements}
+
+        self.assertEqual("warning", by_id["figure.size_inches"].severity)
+        self.assertEqual("numeric_close", by_id["figure.size_inches"].match_policy)
+        self.assertEqual("4 by 3 inch", by_id["figure.size_inches"].source_span)
+        self.assertEqual("error", by_id["panel_0.axis_0.title"].severity)
+        self.assertEqual("exact", by_id["panel_0.axis_0.title"].match_policy)
+        self.assertEqual("titled Summary", by_id["panel_0.axis_0.title"].source_span)
+        self.assertEqual("contains", by_id["panel_0.axis_0.legend_labels"].match_policy)
+
+    def test_merge_expected_figure_specs_preserves_overlay_source_spans(self):
+        base = FigureRequirementSpec(
+            size_inches=(3.0, 2.0),
+            source_spans={"size_inches": "3 by 2 inch"},
+            axes=(
+                AxisRequirementSpec(
+                    axis_index=0,
+                    title="Base",
+                    source_spans={"title": "title Base"},
+                ),
+            ),
+        )
+        overlay = FigureRequirementSpec(
+            figure_title="Overlay",
+            source_spans={"figure_title": "main title Overlay"},
+            axes=(
+                AxisRequirementSpec(
+                    axis_index=0,
+                    xlabel="Year",
+                    source_spans={"xlabel": "x-axis Year"},
+                ),
+            ),
+        )
+
+        merged = merge_expected_figure_specs(base, overlay)
+
+        self.assertEqual("3 by 2 inch", merged.source_spans["size_inches"])
+        self.assertEqual("main title Overlay", merged.source_spans["figure_title"])
+        self.assertEqual("title Base", merged.axes[0].source_spans["title"])
+        self.assertEqual("x-axis Year", merged.axes[0].source_spans["xlabel"])
+    def test_requirement_policy_reclassifies_axis_bounds_as_warning(self):
+        pipeline = GroundedChartPipeline(parser=HeuristicIntentParser())
+        result = pipeline.run(
+            query="Draw a chart with a fixed panel position.",
+            schema=TableSchema(columns={}),
+            rows=(),
+            actual_trace=PlotTrace(chart_type="unknown", points=(), source="actual"),
+            expected_figure=FigureRequirementSpec(
+                axes=(
+                    AxisRequirementSpec(
+                        axis_index=0,
+                        bounds=(0.1, 0.1, 0.8, 0.8),
+                        source_spans={"bounds": "fixed panel position"},
+                    ),
+                ),
+            ),
+            actual_figure=FigureTrace(
+                axes=(AxisTrace(index=0, bounds=(0.3, 0.3, 0.4, 0.4)),),
+                source="actual_figure",
+            ),
+            verify_data=False,
+        )
+
+        self.assertFalse(result.report.ok)
+        self.assertEqual(("wrong_axis_layout",), result.report.error_codes)
+        error = result.report.errors[0]
+        self.assertEqual("panel_0.axis_0.bounds", error.requirement_id)
+        self.assertEqual("warning", error.severity)
+        self.assertEqual("numeric_close", error.match_policy)
+        requirement = next(
+            requirement
+            for requirement in result.requirement_plan.requirements
+            if requirement.requirement_id == "panel_0.axis_0.bounds"
+        )
+        self.assertEqual("warning", requirement.severity)
+        self.assertEqual("numeric_close", requirement.match_policy)
 
 if __name__ == "__main__":
     unittest.main()
