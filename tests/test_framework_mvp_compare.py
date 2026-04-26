@@ -108,6 +108,10 @@ class FrameworkMvpCompareTest(unittest.TestCase):
         self.assertEqual(7, metrics["prompt_tokens"])
         self.assertEqual(8, metrics["completion_tokens"])
         self.assertEqual(15, metrics["total_tokens"])
+        self.assertEqual(0, metrics["repair_call_count"])
+        self.assertEqual(0, metrics["repair_total_tokens"])
+        self.assertEqual(1, metrics["expected_artifact_call_count"])
+        self.assertEqual(15, metrics["expected_artifact_total_tokens"])
 
     def test_llm_usage_metrics_count_attempt_traces_once(self):
         metrics = mvp_compare.llm_usage_metrics_from_cases(
@@ -131,6 +135,10 @@ class FrameworkMvpCompareTest(unittest.TestCase):
         self.assertEqual(14, metrics["prompt_tokens"])
         self.assertEqual(25, metrics["completion_tokens"])
         self.assertEqual(39, metrics["total_tokens"])
+        self.assertEqual(2, metrics["repair_call_count"])
+        self.assertEqual(39, metrics["repair_total_tokens"])
+        self.assertEqual(0, metrics["expected_artifact_call_count"])
+        self.assertEqual(0, metrics["expected_artifact_total_tokens"])
 
     def test_build_comparisons_includes_llm_prompt_ablation(self):
         base_case = {

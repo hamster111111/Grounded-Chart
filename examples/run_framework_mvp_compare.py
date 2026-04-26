@@ -181,10 +181,14 @@ def main() -> None:
             requirement.get("warning_failed_requirements", 0),
             "repair_attempt_cases=",
             variant_summary["repair_metrics"]["cases_with_repair_attempts"],
-            "llm_calls=",
-            llm_usage.get("call_count", 0),
-            "tokens=",
-            llm_usage.get("total_tokens", 0),
+            "repair_llm_calls=",
+            llm_usage.get("repair_call_count", llm_usage.get("call_count", 0)),
+            "repair_tokens=",
+            llm_usage.get("repair_total_tokens", llm_usage.get("total_tokens", 0)),
+            "artifact_llm_calls=",
+            llm_usage.get("expected_artifact_call_count", 0),
+            "artifact_tokens=",
+            llm_usage.get("expected_artifact_total_tokens", 0),
         )
     for comparison in compare_summary["comparisons"]:
         print(
@@ -773,39 +777,58 @@ def build_variant_summary(
     }
 
 def llm_usage_metrics_from_cases(cases: list[dict[str, Any]]) -> dict[str, int]:
-    call_count = 0
-    prompt_tokens = 0
-    completion_tokens = 0
-    total_tokens = 0
-    missing_usage_count = 0
+    total_metrics = _empty_llm_usage_metrics()
+    repair_metrics = _empty_llm_usage_metrics()
+    expected_artifact_metrics = _empty_llm_usage_metrics()
     for case in cases:
-        traces = []
+        repair_traces = []
         attempts = list(case.get("repair_attempts") or [])
         for attempt in attempts:
             trace = attempt.get("llm_trace")
             if trace:
-                traces.append(trace)
-        if not traces and case.get("repair_trace"):
-            traces.append(case["repair_trace"])
+                repair_traces.append(trace)
+        if not repair_traces and case.get("repair_trace"):
+            repair_traces.append(case["repair_trace"])
+        for trace in repair_traces:
+            _record_trace_usage(repair_metrics, trace)
+            _record_trace_usage(total_metrics, trace)
+
         expected_artifact_trace = ((case.get("case_metadata") or {}).get("expected_artifact_extraction") or {}).get("llm_trace")
         if expected_artifact_trace:
-            traces.append(expected_artifact_trace)
-        for trace in traces:
-            call_count += 1
-            usage = dict(trace.get("usage") or {})
-            if not usage:
-                missing_usage_count += 1
-                continue
-            prompt_tokens += int(usage.get("prompt_tokens") or 0)
-            completion_tokens += int(usage.get("completion_tokens") or 0)
-            total_tokens += int(usage.get("total_tokens") or 0)
+            _record_trace_usage(expected_artifact_metrics, expected_artifact_trace)
+            _record_trace_usage(total_metrics, expected_artifact_trace)
+
     return {
-        "call_count": call_count,
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": total_tokens,
-        "missing_usage_count": missing_usage_count,
+        **total_metrics,
+        **_prefixed_llm_usage_metrics("repair", repair_metrics),
+        **_prefixed_llm_usage_metrics("expected_artifact", expected_artifact_metrics),
     }
+
+
+def _empty_llm_usage_metrics() -> dict[str, int]:
+    return {
+        "call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "missing_usage_count": 0,
+    }
+
+
+def _record_trace_usage(metrics: dict[str, int], trace: dict[str, Any]) -> None:
+    metrics["call_count"] += 1
+    usage = dict(trace.get("usage") or {})
+    if not usage:
+        metrics["missing_usage_count"] += 1
+        return
+    metrics["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+    metrics["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+    metrics["total_tokens"] += int(usage.get("total_tokens") or 0)
+
+
+def _prefixed_llm_usage_metrics(prefix: str, metrics: dict[str, int]) -> dict[str, int]:
+    return {f"{prefix}_{key}": value for key, value in metrics.items()}
+
 
 def verdict_counter_delta(links: list[dict[str, Any]], verdict: str) -> int:
     return sum(1 for link in links if link.get("verdict") == verdict)
@@ -959,6 +982,10 @@ def compare_variants(
         "warning_failed_requirement_delta": cand_req.get("warning_failed_requirements", 0) - base_req.get("warning_failed_requirements", 0),
         "llm_call_delta": candidate.get("llm_usage_metrics", {}).get("call_count", 0) - baseline.get("llm_usage_metrics", {}).get("call_count", 0),
         "llm_total_token_delta": candidate.get("llm_usage_metrics", {}).get("total_tokens", 0) - baseline.get("llm_usage_metrics", {}).get("total_tokens", 0),
+        "repair_llm_call_delta": candidate.get("llm_usage_metrics", {}).get("repair_call_count", 0) - baseline.get("llm_usage_metrics", {}).get("repair_call_count", 0),
+        "repair_llm_total_token_delta": candidate.get("llm_usage_metrics", {}).get("repair_total_tokens", 0) - baseline.get("llm_usage_metrics", {}).get("repair_total_tokens", 0),
+        "expected_artifact_llm_call_delta": candidate.get("llm_usage_metrics", {}).get("expected_artifact_call_count", 0) - baseline.get("llm_usage_metrics", {}).get("expected_artifact_call_count", 0),
+        "expected_artifact_llm_total_token_delta": candidate.get("llm_usage_metrics", {}).get("expected_artifact_total_tokens", 0) - baseline.get("llm_usage_metrics", {}).get("expected_artifact_total_tokens", 0),
         "newly_passed_cases": newly_passed_cases,
         "policy_clean_newly_passed_cases": newly_passed_cases - guarded_success_count,
         "regressed_cases": regressed_cases,
