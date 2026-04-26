@@ -78,6 +78,33 @@ plt.bar(categories, sales)
         self.assertIn("plt.bar", loaded[0].generated_code)
 
 
+    def test_json_adapter_loads_utf8_bom_case_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            code_path = root / "case_code.py"
+            code_path.write_text("import matplotlib.pyplot as plt\nplt.bar(['A'], [1])\n", encoding="utf-8")
+            cases_path = root / "cases.json"
+            cases_path.write_text(
+                "\ufeff"
+                + json.dumps(
+                    [
+                        {
+                            "case_id": "bom-case",
+                            "query": "Show sales by category in a bar chart.",
+                            "schema": {"columns": {"category": "str", "sales": "number"}},
+                            "rows": [{"category": "A", "sales": 1}],
+                            "generated_code_path": "case_code.py",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = list(JsonCaseAdapter(cases_path).iter_cases())
+
+        self.assertEqual(1, len(loaded))
+        self.assertEqual("bom-case", loaded[0].case_id)
+
     def test_json_adapter_loads_expected_trace(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -62,7 +62,7 @@ class JsonCaseAdapter:
     def _load_raw_cases(self) -> list[dict[str, Any]]:
         if not self.path.exists():
             raise FileNotFoundError(f"JSON case file not found: {self.path}")
-        cases = json.loads(self.path.read_text(encoding="utf-8"))
+        cases = json.loads(self.path.read_text(encoding="utf-8-sig"))
         if not isinstance(cases, list):
             raise ValueError("JSON case file must contain a list of cases.")
         for index, case in enumerate(cases):
