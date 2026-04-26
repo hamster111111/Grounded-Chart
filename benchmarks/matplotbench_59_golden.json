@@ -1,0 +1,64 @@
+[
+    {
+        "case_id":  "matplotbench-59-wrong-bar-cardinality",
+        "query":  "MatPlotBench example 59 smoke case.",
+        "schema":  {
+                       "columns":  {
+
+                                   }
+                   },
+        "rows":  [
+
+                 ],
+        "generated_code_path":  "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+        "verification_mode":  "figure_and_data",
+        "expected_trace":  {
+                               "chart_type":  "bar",
+                               "source":  "matplotbench_instruction_expected_points",
+                               "points":  [
+                                              {
+                                                  "x":  1,
+                                                  "y":  4
+                                              },
+                                              {
+                                                  "x":  2,
+                                                  "y":  3
+                                              },
+                                              {
+                                                  "x":  3,
+                                                  "y":  2
+                                              },
+                                              {
+                                                  "x":  4,
+                                                  "y":  4
+                                              }
+                                          ]
+                           },
+        "figure_requirements":  {
+                                    "figure_title":  "Advanced Transformations Demo",
+                                    "axes":  [
+                                                 {
+                                                     "axis_index":  0,
+                                                     "title":  "Scaled \u0026 Rotated Bar Plot",
+                                                     "artist_counts":  {
+                                                                           "patch":  4
+                                                                       }
+                                                 }
+                                             ]
+                                },
+        "metadata":  {
+                         "benchmark":  "MatPlotBench",
+                         "native_id":  59,
+                         "source_code":  "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+                         "gpt4v_score":  0,
+                         "reason":  "The instruction specifies bar x-values 1,2,3,4 with y-values 4,3,2,4. Generated code plots five bars with different values, which is visible as a patch-count mismatch on the first panel.",
+                         "source_failure_report":  "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+                         "previous_status":  "failed",
+                         "previous_error_codes":  [
+                                                      "wrong_artist_count"
+                                                  ],
+                         "previous_repair_scope":  "local_patch",
+                         "previous_exception_type":  null
+                     }
+    }
+]

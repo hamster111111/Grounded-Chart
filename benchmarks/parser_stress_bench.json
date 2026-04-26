@@ -1,0 +1,167 @@
+[
+  {
+    "case_id": "parser-stress-sort-synonym",
+    "query": "Show total sales by category in a bar chart, ordered from smallest to largest.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {"category": "A", "sales": 10},
+      {"category": "A", "sales": 15},
+      {"category": "B", "sales": 7}
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1], reverse=True)\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ordered from smallest to largest.",
+      "confidence": 1.0
+    },
+    "metadata": {
+      "expected_behavior": "parser_gap",
+      "parser_stress_type": "sort_synonym",
+      "expected_predicted_behavior": "likely_pass_without_order_enforcement",
+      "expected_oracle_behavior": "fail_wrong_order"
+    }
+  },
+  {
+    "case_id": "parser-stress-filter-phrase",
+    "query": "Show total sales by category for East region in a bar chart, ascending.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {"category": "A", "region": "East", "sales": 10},
+      {"category": "A", "region": "West", "sales": 15},
+      {"category": "B", "region": "East", "sales": 7},
+      {"category": "B", "region": "West", "sales": 4}
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [{"column": "region", "op": "eq", "value": "East"}],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category for East region in a bar chart, ascending.",
+      "confidence": 1.0
+    },
+    "metadata": {
+      "expected_behavior": "parser_gap",
+      "parser_stress_type": "filter_phrase",
+      "expected_predicted_behavior": "likely_pass_without_filter",
+      "expected_oracle_behavior": "fail_filter_or_aggregation"
+    }
+  },
+  {
+    "case_id": "parser-stress-mean-synonym",
+    "query": "Show typical sales by category in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {"category": "A", "sales": 10},
+      {"category": "A", "sales": 20},
+      {"category": "B", "sales": 4},
+      {"category": "B", "sales": 8}
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nplt.bar(list(totals.keys()), list(totals.values()))\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "mean"},
+      "filters": [],
+      "sort": null,
+      "limit": null,
+      "raw_query": "Show typical sales by category in a bar chart.",
+      "confidence": 1.0
+    },
+    "metadata": {
+      "expected_behavior": "parser_gap",
+      "parser_stress_type": "aggregation_synonym",
+      "expected_predicted_behavior": "likely_pass_with_implicit_sum",
+      "expected_oracle_behavior": "fail_wrong_mean"
+    }
+  },
+  {
+    "case_id": "parser-stress-dimension-alias",
+    "query": "Show total sales by market in a bar chart.",
+    "schema": {
+      "columns": {
+        "category": "str",
+        "region": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {"category": "A", "region": "East", "sales": 10},
+      {"category": "A", "region": "West", "sales": 15},
+      {"category": "B", "region": "East", "sales": 7},
+      {"category": "B", "region": "West", "sales": 4}
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nplt.bar(list(totals.keys()), list(totals.values()))\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["region"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": null,
+      "limit": null,
+      "raw_query": "Show total sales by market in a bar chart.",
+      "confidence": 1.0
+    },
+    "metadata": {
+      "expected_behavior": "parser_gap",
+      "parser_stress_type": "dimension_alias",
+      "expected_predicted_behavior": "likely_pass_with_first_categorical_dimension",
+      "expected_oracle_behavior": "fail_wrong_dimension"
+    }
+  },
+  {
+    "case_id": "parser-stress-chart-type-synonym",
+    "query": "Draw the sales trend by month.",
+    "schema": {
+      "columns": {
+        "month": "str",
+        "sales": "number"
+      }
+    },
+    "rows": [
+      {"month": "Jan", "sales": 10},
+      {"month": "Feb", "sales": 15},
+      {"month": "Mar", "sales": 12}
+    ],
+    "generated_code": "import matplotlib.pyplot as plt\n\nmonths = [row[\"month\"] for row in rows]\nsales = [row[\"sales\"] for row in rows]\nplt.bar(months, sales)\n",
+    "oracle_plan": {
+      "chart_type": "line",
+      "dimensions": ["month"],
+      "measure": {"column": "sales", "agg": "none"},
+      "filters": [],
+      "sort": null,
+      "limit": null,
+      "raw_query": "Draw the sales trend by month.",
+      "confidence": 1.0
+    },
+    "metadata": {
+      "expected_behavior": "parser_gap",
+      "parser_stress_type": "chart_type_synonym",
+      "expected_predicted_behavior": "likely_pass_with_default_bar",
+      "expected_oracle_behavior": "fail_wrong_chart_type"
+    }
+  }
+]

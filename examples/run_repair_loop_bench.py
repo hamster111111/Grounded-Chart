@@ -12,6 +12,7 @@ def main() -> None:
     pipeline = GroundedChartPipeline(
         parser=HeuristicIntentParser(),
         repairer=RuleBasedRepairer(),
+        repair_policy_mode="strict",
         enable_bounded_repair_loop=True,
         max_repair_rounds=2,
     )

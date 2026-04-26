@@ -31,6 +31,7 @@ def main() -> None:
     pipeline = GroundedChartPipeline(
         parser=parser,
         repairer=repairer,
+        repair_policy_mode=config.repair_policy_mode,
         enable_bounded_repair_loop=config.enable_repair_loop,
         max_repair_rounds=config.max_repair_rounds,
     )
@@ -50,6 +51,7 @@ def main() -> None:
     print("Config:", args.config or "env")
     print("Parser backend:", config.parser_backend)
     print("Repair backend:", config.repair_backend)
+    print("Repair policy mode:", config.repair_policy_mode)
     print("Repair loop enabled:", config.enable_repair_loop)
     print("Report:", output_dir / "report.json")
     print("HTML:", output_dir / "report.html")
@@ -77,9 +79,9 @@ def build_parser(config: AblationRunConfig):
     return HeuristicIntentParser()
 
 
-def build_repairer(config: AblationRunConfig):
+def build_repairer(config: AblationRunConfig, *, include_failure_atoms: bool = True):
     if config.repair_backend == "tiered":
-        llm_repairer = LLMRepairer(build_client(config.repair_provider, role="repair"))
+        llm_repairer = LLMRepairer(build_client(config.repair_provider, role="repair"), include_failure_atoms=include_failure_atoms)
         if config.repair_tier_mode == "llm_only":
             return TieredRepairer(
                 deterministic_repairer=RuleBasedRepairer(),
@@ -98,7 +100,7 @@ def build_repairer(config: AblationRunConfig):
             )
         return RuleBasedRepairer()
     if config.repair_backend == "llm":
-        return LLMRepairer(build_client(config.repair_provider, role="repair"))
+        return LLMRepairer(build_client(config.repair_provider, role="repair"), include_failure_atoms=include_failure_atoms)
     return RuleBasedRepairer()
 
 

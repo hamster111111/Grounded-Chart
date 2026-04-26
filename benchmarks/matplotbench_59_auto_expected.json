@@ -1,0 +1,44 @@
+[
+    {
+        "case_id":  "matplotbench-59-wrong-bar-cardinality",
+        "query":  "MatPlotBench example 59 smoke case.",
+        "schema":  {
+                       "columns":  {
+
+                                   }
+                   },
+        "rows":  [
+
+                 ],
+        "generated_code_path":  "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+        "verification_mode":  "figure_only",
+        "figure_requirements":  {
+                                    "figure_title":  "Advanced Transformations Demo",
+                                    "axes":  [
+                                                 {
+                                                     "axis_index":  0,
+                                                     "title":  "Scaled \u0026 Rotated Bar Plot",
+                                                     "artist_counts":  {
+                                                                           "patch":  4
+                                                                       }
+                                                 }
+                                             ]
+                                },
+        "metadata":  {
+                         "benchmark":  "MatPlotBench",
+                         "native_id":  59,
+                         "source_code":  "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
+                         "gpt4v_score":  0,
+                         "reason":  "The instruction specifies bar x-values 1,2,3,4 with y-values 4,3,2,4. Generated code plots five bars with different values, which is visible as a patch-count mismatch on the first panel.",
+                         "source_failure_report":  "D:\\Code\\autoReaserch\\GroundedChart\\outputs\\matplotbench_smoke_wrong\\report.json",
+                         "previous_status":  "failed",
+                         "previous_error_codes":  [
+                                                      "wrong_artist_count"
+                                                  ],
+                         "previous_repair_scope":  "local_patch",
+                         "previous_exception_type":  null
+                     },
+        "simple_instruction":  "Create a Python script for generating a plot with three distinct subplots, each demonstrating different transformations and plot types:\n\nUse a fixed random seed 12345678 to ensure consistent results across runs.\nImplement three separate functions, each taking a figure and a rectangle as inputs:\nThe first function creates a subplot with a transformation scaling by 3 in the x-direction and 2 in the y-direction, and a 45-degree rotation to the spines. It should return the subplot and its auxiliary axes.\nThe second function generates a subplot that displays the upper left quadrant of a full polar grid using polar coordinates with custom locators and formatters, returning the subplot and its auxiliary axes.\nThe third function creates a subplot with a composite transformation (including a 45 degree rotation, log scaling, and polar transformation which shows half of a full polar grid), adjusts axis directions and visibility, sets axis labels, and returns the subplot and its auxiliary axes.\nUse the first function to add a bar plot with specific x and y values.\nUtilize the second function to include a scatter plot with random theta and radius values.\nEmploy the third function to insert a scatter plot with random theta and radius values.\nDisplay the plot.\nThis script should result in a complex plot featuring different types of transformations and plotting methods.",
+        "expert_instruction":  "Could you help me create a Python script that does the following?\n\n1. First, we need to import some libraries. We\u0027ll need one for creating plots, one for numerical operations, and a few others for creating different types of transformations and for working with axes and grids.\n\n2. To ensure that our results are consistent every time we run the script, let\u0027s set a seed for the random number generator in our numerical operations library.\n\n3. Now, let\u0027s define a function that takes a figure and a rectangle as arguments. This function should create a transformation that scales by 3 in the x-direction and 2 in the y-direction, and rotates by 45 degrees. It should then create a helper for the grid with the transformation and certain extremes, and add a subplot to the figure with the grid helper. The function should return the subplot and its auxiliary axes.\n\n4. Next, let\u0027s define another function that also takes a figure and a rectangle as arguments. This function should create a polar transformation and a grid helper with the transformation, custom locators, and formatters. It should add a subplot to the figure with the grid helper and return the subplot and its auxiliary axes. This subplot should display the upper left quadrant of a full polar grid.\n\n5. Let\u0027s define a third function that takes a figure and a rectangle as arguments. This function should create a composite transformation that includes a 45-degree rotation, log scaling, and a polar transformation. It should create a grid helper with the transformation, custom locators, and formatters, and add a subplot to the figure with the grid helper. The function should adjust the axis directions and visibility, set axis labels, and return the subplot and its auxiliary axes.\n\n6. Now, let\u0027s create a figure with a specific size and subplot adjustments.\n\n7. We\u0027ll call the first function with the figure and a rectangle, and create a bar plot on the auxiliary axes. Let\u0027s use the numbers 1, 2, 3, and 4 for the x-values, and the numbers 4, 3, 2, and 4 for the y-values.\n\n8. Then, we\u0027ll call the second function with the figure and a rectangle, and create a scatter plot on the auxiliary axes with random theta and radius values. Let\u0027s use 20 random theta values between 0 and half pi, and 20 random radius values between 1 and 2.\n\n9. Finally, we\u0027ll call the third function with the figure and a rectangle, and create a scatter plot on the auxiliary axes with random theta and radius values. Let\u0027s use 20 random theta values between 120 and 210 degrees, and 20 random radius values between 0 and 20000.\n\n10. To finish, let\u0027s display the plot using the function from our plotting library that shows the current figure."
+    }
+]

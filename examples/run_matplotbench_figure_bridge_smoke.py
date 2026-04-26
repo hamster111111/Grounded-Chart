@@ -11,7 +11,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import LLMIntentParser, OpenAICompatibleLLMClient, TableSchema, derive_expected_figure, load_ablation_run_config
+from grounded_chart import LLMIntentParser, OpenAICompatibleLLMClient, TableSchema, derive_expected_figure, extract_expected_trace_from_texts, load_ablation_run_config
 from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 from grounded_chart_adapters import ChartCase, InMemoryCaseAdapter, write_batch_report_html
 
@@ -79,7 +79,8 @@ def main() -> None:
             rows=case.rows,
             generated_code=case.generated_code,
             figure_requirements=case.figure_requirements,
-            verification_mode="figure_only",
+            verification_mode="figure_and_data" if case.expected_trace is not None else "figure_only",
+            expected_trace=case.expected_trace,
             metadata={
                 **case.metadata,
                 "smoke_selection": {
@@ -223,6 +224,7 @@ def _load_native_failed_cases(path: Path) -> dict[str, ChartCase]:
                 "eval_error": raw.get("eval_error"),
             }
         )
+        expected_trace = _expected_trace_from_native_case(raw)
         cases[case_id] = ChartCase(
             case_id=case_id,
             query=raw["query"],
@@ -230,10 +232,22 @@ def _load_native_failed_cases(path: Path) -> dict[str, ChartCase]:
             rows=(),
             generated_code=generated_code,
             figure_requirements=None,
-            verification_mode="figure_only",
+            verification_mode="figure_and_data" if expected_trace is not None else "figure_only",
+            expected_trace=expected_trace,
             metadata=metadata,
         )
     return cases
+
+
+
+
+def _expected_trace_from_native_case(raw: dict[str, Any]):
+    texts: list[tuple[str, str]] = []
+    for key in ("expert_instruction", "simple_instruction", "instruction", "query"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            texts.append((key, value))
+    return extract_expected_trace_from_texts(texts)
 
 
 def _derive_expected_figure_from_raw_plan(raw_plan: dict[str, Any]):

@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "case_id": "matplotbench-20-wrong-3d-bar-yticks",
     "query": "MatPlotBench example 20 smoke case.",
@@ -308,7 +308,29 @@
     },
     "rows": [],
     "generated_code_path": "D:\\Code\\autoReaserch\\MatPlotAgent\\workspace_full\\example_59\\code_action_deepseek_vis_refined_1.py",
-    "verification_mode": "figure_only",
+    "verification_mode": "figure_and_data",
+    "expected_trace": {
+      "chart_type": "bar",
+      "source": "matplotbench_instruction_expected_points",
+      "points": [
+        {
+          "x": 1,
+          "y": 4
+        },
+        {
+          "x": 2,
+          "y": 3
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 4,
+          "y": 4
+        }
+      ]
+    },
     "figure_requirements": {
       "figure_title": "Advanced Transformations Demo",
       "axes": [

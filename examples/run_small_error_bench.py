@@ -9,7 +9,11 @@ def main() -> None:
     bench_path = project_root / "benchmarks" / "small_error_bench.json"
     output_dir = project_root / "outputs" / "small_error_bench"
     adapter = JsonCaseAdapter(bench_path)
-    pipeline = GroundedChartPipeline(parser=HeuristicIntentParser(), repairer=RuleBasedRepairer())
+    pipeline = GroundedChartPipeline(
+        parser=HeuristicIntentParser(),
+        repairer=RuleBasedRepairer(),
+        repair_policy_mode="strict",
+    )
     batch = BatchRunner(pipeline, continue_on_error=True).run(adapter)
 
     output_dir.mkdir(parents=True, exist_ok=True)

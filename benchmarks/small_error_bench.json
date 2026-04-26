@@ -23,6 +23,16 @@
       }
     ],
     "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1])\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "pass",
       "failure_mode": "none",
@@ -56,6 +66,16 @@
       }
     ],
     "generated_code": "import matplotlib.pyplot as plt\n\ncategories = [row[\"category\"] for row in rows]\nsales = [row[\"sales\"] for row in rows]\nplt.bar(categories, sales)\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "fail",
       "failure_mode": "missing_groupby",
@@ -89,6 +109,16 @@
       }
     ],
     "generated_code": "import matplotlib.pyplot as plt\n\ntotals = {}\nfor row in rows:\n    totals[row[\"category\"]] = totals.get(row[\"category\"], 0) + row[\"sales\"]\nitems = sorted(totals.items(), key=lambda item: item[1], reverse=True)\nplt.bar([key for key, value in items], [value for key, value in items])\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "fail",
       "failure_mode": "wrong_sort",
@@ -118,6 +148,16 @@
       }
     ],
     "generated_code": "import matplotlib.pyplot as plt\n\nplt.bar(missing_categories, [1, 2])\n",
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "error",
       "failure_mode": "execution_error",
@@ -175,6 +215,16 @@
           ]
         }
       ]
+    },
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
     },
     "metadata": {
       "expected_behavior": "pass",
@@ -234,6 +284,16 @@
         }
       ]
     },
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "fail",
       "failure_mode": "missing_title_label",
@@ -291,6 +351,16 @@
           ]
         }
       ]
+    },
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
     },
     "metadata": {
       "expected_behavior": "fail",
@@ -350,6 +420,16 @@
         }
       ]
     },
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
+    },
     "metadata": {
       "expected_behavior": "fail",
       "failure_mode": "wrong_subplot_count",
@@ -400,6 +480,16 @@
           ]
         }
       ]
+    },
+    "oracle_plan": {
+      "chart_type": "bar",
+      "dimensions": ["category"],
+      "measure": {"column": "sales", "agg": "sum"},
+      "filters": [],
+      "sort": {"by": "measure", "direction": "asc"},
+      "limit": null,
+      "raw_query": "Show total sales by category in a bar chart, ascending.",
+      "confidence": 1.0
     },
     "metadata": {
       "expected_behavior": "fail",
