@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
@@ -176,6 +176,9 @@ class HeuristicIntentParser:
             span = _first_span(query, (rf"\b{re.escape(chart_type)}\s+(?:chart|plot|graph)\b", rf"\b{re.escape(chart_type)}\b"))
             if span:
                 return _ParsedValue(chart_type, span, "explicit", confidence=0.8)
+        trend_span = _first_span(query, (r"\btrend\b", r"\bover\s+time\b", r"\btime\s+series\b"))
+        if trend_span:
+            return _ParsedValue("line", trend_span, "explicit", confidence=0.7)
         return _ParsedValue(
             "bar",
             "",
@@ -187,7 +190,7 @@ class HeuristicIntentParser:
     def _aggregation(self, query: str) -> _ParsedValue:
         patterns: tuple[tuple[str, tuple[str, ...]], ...] = (
             ("count", (r"\bcount\b", r"\bnumber of\b", r"\bhow many\b")),
-            ("mean", (r"\bavg\b", r"\baverage\b", r"\bmean\b")),
+            ("mean", (r"\bavg\b", r"\baverage\b", r"\bmean\b", r"\btypical\b")),
             ("max", (r"\bmax\b", r"\bmaximum\b", r"\bhighest\b")),
             ("min", (r"\bmin\b", r"\bminimum\b", r"\blowest\b")),
             ("sum", (r"\bsum\b", r"\btotal\b")),
@@ -236,12 +239,14 @@ class HeuristicIntentParser:
     def _dimension_columns(self, query: str, schema: TableSchema, exclude: str | None) -> _ParsedValue:
         by_match = re.search(r"(?:\bby\b|\bper\b|\bfor each\b|\bgrouped by\b)\s+([\w ]+)", query, re.IGNORECASE)
         if by_match:
-            phrase = by_match.group(1)
+            phrase = re.split(r"\bwhere\b|\bfor\b|\bin\s+(?:a|an|the)\b|,", by_match.group(1), maxsplit=1, flags=re.IGNORECASE)[0]
             matches: list[tuple[int, str, str]] = []
             for column in schema.columns:
                 if column == exclude:
                     continue
                 column_match = _column_match(phrase, column)
+                if column_match is None:
+                    column_match = _column_alias_match(phrase, column)
                 if column_match is not None:
                     matches.append((column_match.start(), column, phrase[column_match.start() : column_match.end()]))
             if matches:
@@ -269,8 +274,8 @@ class HeuristicIntentParser:
 
     def _sort(self, query: str) -> _ParsedValue:
         patterns: tuple[tuple[SortDirection, tuple[str, ...]], ...] = (
-            ("asc", (r"\bascending\b", r"\blow to high\b", r"\basc\b")),
-            ("desc", (r"\bdescending\b", r"\bhigh to low\b", r"\bdesc\b")),
+            ("asc", (r"\bascending\b", r"\blow to high\b", r"\bsmallest\s+to\s+largest\b", r"\blowest\s+to\s+highest\b", r"\basc\b")),
+            ("desc", (r"\bdescending\b", r"\bhigh to low\b", r"\blargest\s+to\s+smallest\b", r"\bhighest\s+to\s+lowest\b", r"\bdesc\b")),
         )
         for direction, regexes in patterns:
             span = _first_span(query, regexes)
@@ -305,6 +310,7 @@ class HeuristicIntentParser:
                 ("lt", rf"\b{column_regex}\s+(?:less than|below|under)\s+(?P<value>-?\d+(?:\.\d+)?)"),
                 ("eq", rf"\b{column_regex}\s*(?:=|==|equals|is)\s*['\"]?(?P<value>[\w .-]+?)['\"]?(?=,|\.|;|\band\b|\bby\b|$)"),
             )
+            matched = False
             for op, pattern in comparison_patterns:
                 match = re.search(pattern, query, re.IGNORECASE)
                 if not match:
@@ -317,7 +323,28 @@ class HeuristicIntentParser:
                         confidence=0.7,
                     )
                 )
+                matched = True
                 break
+            if matched:
+                continue
+            if schema.columns[column] not in {"int", "float", "number"}:
+                value_before_column = re.search(
+                    rf"\b(?:for|in|from|within)\s+(?P<value>[\w .-]+?)\s+{column_regex}\b",
+                    query,
+                    re.IGNORECASE,
+                )
+                if value_before_column:
+                    filters.append(
+                        _FilterExtraction(
+                            spec=FilterSpec(
+                                column=column,
+                                op="eq",
+                                value=_coerce_filter_value(value_before_column.group("value").strip()),
+                            ),
+                            source_span=query[value_before_column.start() : value_before_column.end()],
+                            confidence=0.65,
+                        )
+                    )
         return tuple(filters)
 
 
@@ -1400,12 +1427,32 @@ def _column_span(query: str, column: str | None) -> str:
         return ""
     match = _column_match(query, column)
     if match is None:
+        match = _column_alias_match(query, column)
+    if match is None:
         return ""
     return query[match.start() : match.end()]
 
 
 def _column_match(text: str, column: str) -> re.Match[str] | None:
     return re.search(rf"\b(?:{_column_regex(column)})\b", text, re.IGNORECASE)
+
+
+def _column_alias_match(text: str, column: str) -> re.Match[str] | None:
+    aliases = _column_aliases(column)
+    if not aliases:
+        return None
+    pattern = "|".join(re.escape(alias) for alias in sorted(aliases, key=len, reverse=True))
+    return re.search(rf"\b(?:{pattern})\b", text, re.IGNORECASE)
+
+
+def _column_aliases(column: str) -> tuple[str, ...]:
+    normalized = column.strip().lower().replace("_", " ")
+    aliases_by_column = {
+        "region": ("market", "area", "geography", "territory"),
+        "category": ("class", "type", "group"),
+        "month": ("time", "date", "period"),
+    }
+    return aliases_by_column.get(normalized, ())
 
 
 def _column_regex(column: str) -> str:
@@ -1422,7 +1469,7 @@ def _joined_column_spans(query: str, columns: tuple[str, ...]) -> str:
 def _aggregation_span(query: str, aggregation: str) -> str:
     patterns = {
         "count": (r"\bcount\b", r"\bnumber of\b", r"\bhow many\b"),
-        "mean": (r"\bavg\b", r"\baverage\b", r"\bmean\b"),
+        "mean": (r"\bavg\b", r"\baverage\b", r"\bmean\b", r"\btypical\b"),
         "max": (r"\bmax\b", r"\bmaximum\b", r"\bhighest\b"),
         "min": (r"\bmin\b", r"\bminimum\b", r"\blowest\b"),
         "sum": (r"\bsum\b", r"\btotal\b"),
@@ -1434,8 +1481,8 @@ def _sort_span(query: str, sort: SortSpec | None) -> str:
     if sort is None:
         return ""
     if sort.direction == "asc":
-        return _first_span(query, (r"\bascending\b", r"\blow to high\b", r"\basc\b", r"\bbottom\s+\d+\b"))
-    return _first_span(query, (r"\bdescending\b", r"\bhigh to low\b", r"\bdesc\b", r"\btop\s+\d+\b"))
+        return _first_span(query, (r"\bascending\b", r"\blow to high\b", r"\bsmallest\s+to\s+largest\b", r"\blowest\s+to\s+highest\b", r"\basc\b", r"\bbottom\s+\d+\b"))
+    return _first_span(query, (r"\bdescending\b", r"\bhigh to low\b", r"\blargest\s+to\s+smallest\b", r"\bhighest\s+to\s+lowest\b", r"\bdesc\b", r"\btop\s+\d+\b"))
 
 
 def _limit_span(query: str, limit: int | None) -> str:

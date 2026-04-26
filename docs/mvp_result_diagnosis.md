@@ -1,4 +1,4 @@
-﻿# MVP Result Diagnosis
+# MVP Result Diagnosis
 
 Date: 2026-04-26
 
@@ -165,3 +165,33 @@ This is closer to the B+C direction: better repair plus better evidence-grounded
 3. Improve policy routing for visual-structure failures such as artist count and eventplot orientation.
 4. Keep Sankey/unsupported backend cases out of automatic local repair unless structural regeneration is explicitly enabled.
 5. Add positive-case preservation tests so repair does not overfit failed subsets.
+## Parser Stress Follow-Up
+
+After the initial MVP diagnosis, we ran `parser_stress_bench` with `--parse-source both` and found a serious false-pass risk: before parser optimization, `verify_only__predicted` passed `4/5` cases while `verify_only__oracle` passed `0/5`. This meant the heuristic parser was missing constraints, so the verifier did not check them.
+
+A small schema-aware parser improvement was added for common requirement synonyms:
+
+- `trend`, `over time`, `time series` -> line chart intent
+- `typical` -> mean aggregation
+- `smallest to largest`, `lowest to highest` -> ascending sort
+- value-before-column categorical filters such as `for East region`
+- conservative column aliases such as `market` -> `region`
+
+After this parser optimization, `parser_stress_bench` changed as follows:
+
+| Variant | Before Parser Opt | After Parser Opt | Interpretation |
+|---|---:|---:|---|
+| verify_only__predicted | 4/5 | 0/5 | False passes were removed; predicted requirements now expose the intended failures. |
+| verify_only__oracle | 0/5 | 0/5 | Oracle baseline unchanged. |
+| vanilla_llm_repair__predicted | 5/5 | 5/5 | Vanilla can repair all parser-stress predicted failures after constraints are exposed. |
+| evidence_guided_llm_repair__predicted | 4/5 | 4/5 | Evidence-guided remains one case behind vanilla on this stress bench. |
+| vanilla_llm_repair__oracle | 3/5 | 3/5 | Oracle-side vanilla unchanged. |
+| evidence_guided_llm_repair__oracle | 4/5 | 4/5 | Oracle-side evidence-guided unchanged and still better than vanilla. |
+
+Important conclusion:
+
+- Parser quality is part of the framework, not a peripheral detail. A weak parser can inflate pass rate by failing to produce verifiable requirements.
+- The parser optimization makes the benchmark stricter and more honest, even though it lowers predicted verify-only pass rate.
+- Evidence-guided repair still needs improvement for data-transformation rewrites such as `mean` aggregation. In the failing case, the failure atom is correct (`expected.aggregated_table -> actual.aggregated_table`), but the LLM returned a non-applicable natural-language patch rather than changed code or patch operations.
+
+This strengthens the evidence-grounded framing: the framework should be evaluated not only by final pass rate, but also by whether it exposes hidden requirement violations instead of silently passing under-specified parser outputs.

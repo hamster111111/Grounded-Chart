@@ -79,5 +79,48 @@ class HeuristicIntentParserTest(unittest.TestCase):
         self.assertEqual(requirements["panel_0.filter_0"].status, "explicit")
 
 
+    def test_parse_requirements_extracts_common_synonyms(self):
+        parser = HeuristicIntentParser()
+
+        sort_plan = parser.parse(
+            "Show total sales by category in a bar chart, ordered from smallest to largest.",
+            TableSchema(columns={"category": "str", "sales": "number"}),
+        )
+        self.assertEqual(sort_plan.sort.direction, "asc")
+
+        mean_plan = parser.parse(
+            "Show typical sales by category in a bar chart.",
+            TableSchema(columns={"category": "str", "sales": "number"}),
+        )
+        self.assertEqual(mean_plan.measure.agg, "mean")
+
+        trend_plan = parser.parse(
+            "Draw the sales trend by month.",
+            TableSchema(columns={"month": "str", "sales": "number"}),
+        )
+        self.assertEqual(trend_plan.chart_type, "line")
+
+    def test_parse_requirements_extracts_value_before_categorical_filter(self):
+        bundle = HeuristicIntentParser().parse_requirements(
+            "Show total sales by category for East region in a bar chart, ascending.",
+            TableSchema(columns={"category": "str", "region": "str", "sales": "number"}),
+        )
+
+        self.assertEqual(bundle.plan.dimensions, ("category",))
+        self.assertEqual(bundle.plan.filters[0].column, "region")
+        self.assertEqual(bundle.plan.filters[0].op, "eq")
+        self.assertEqual(bundle.plan.filters[0].value, "East")
+
+    def test_parse_requirements_uses_schema_aware_dimension_alias(self):
+        bundle = HeuristicIntentParser().parse_requirements(
+            "Show total sales by market in a bar chart.",
+            TableSchema(columns={"category": "str", "region": "str", "sales": "number"}),
+        )
+        requirements = {requirement.requirement_id: requirement for requirement in bundle.requirement_plan.requirements}
+
+        self.assertEqual(bundle.plan.dimensions, ("region",))
+        self.assertEqual(requirements["panel_0.dimensions"].source_span, "market")
+        self.assertEqual(requirements["panel_0.dimensions"].status, "explicit")
+
 if __name__ == "__main__":
     unittest.main()
