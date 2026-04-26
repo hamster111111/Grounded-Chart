@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from grounded_chart import AxisTrace, DataPoint, FigureTrace, LLMExpectedArtifactExtractor, OperatorLevelVerifier, PlotTrace, extract_expected_trace_from_text
 from grounded_chart.expected_artifacts import extract_expected_trace_from_texts
@@ -436,6 +436,26 @@ class ExpectedArtifactExtractionTest(unittest.TestCase):
         self.assertIsNotNone(figure)
         self.assertEqual(4, figure.axes_count)
         self.assertIsNone(figure.size_inches)
+
+    def test_compiler_counts_grid_plus_spanning_bottom_plot(self):
+        text = "Create a subplot mosaic with a layout of 2x2 bar plots at the top two rows and a larger plot spanning the entire bottom row for a cosine curve."
+        client = _FakeJsonClient(
+            {
+                "artifacts": [
+                    {
+                        "artifact_type": "subplot_layout",
+                        "value": {},
+                        "source_span": text,
+                        "confidence": 0.9,
+                    }
+                ]
+            }
+        )
+
+        figure = LLMExpectedArtifactExtractor(client).extract(text).figure_requirements
+
+        self.assertIsNotNone(figure)
+        self.assertEqual(5, figure.axes_count)
 
     def test_compiler_rejects_title_text_not_in_source_span(self):
         text = "Set the title of the chart."

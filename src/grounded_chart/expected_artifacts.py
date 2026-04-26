@@ -702,10 +702,20 @@ def _axes_count_from_layout_text(text: str) -> int | None:
         rows = _positive_int(match.group(1))
         cols = _positive_int(match.group(2))
         if rows is not None and cols is not None:
-            return rows * cols
+            count = rows * cols
+            if _span_has_additional_spanning_plot(normalized[match.end():]):
+                return count + 1
+            return count
     if "side by side" in normalized or "two sections" in normalized or "two subplots" in normalized:
         return 2
     return None
+
+
+def _span_has_additional_spanning_plot(text: str) -> bool:
+    normalized = str(text or "").lower()
+    if not re.search(r"\b(?:and|plus|with)\s+(?:a|one|1|single)\s+(?:larger\s+)?(?:plot|subplot|panel|axis)\b", normalized):
+        return False
+    return "bottom row" in normalized and "span" in normalized
 
 
 def _figure_size_from_artifact(value: dict[str, Any], source_span: str) -> tuple[float, float] | None:
