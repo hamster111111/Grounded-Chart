@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
+
+from grounded_chart.schema import TableSchema
 
 
 @dataclass(frozen=True)
@@ -325,3 +328,308 @@ class MatplotBenchWorkspaceAdapter:
         if not match:
             return None, None
         return match.group(1), int(match.group(2))
+
+@dataclass(frozen=True)
+class MatplotBenchGenerationCase:
+    """MatPlotBench case shape consumed by ChartGenerationPipeline."""
+
+    case_id: str
+    query: str
+    schema: TableSchema
+    rows: tuple[dict[str, Any], ...] = ()
+    generation_mode: str = "instruction_only"
+    ground_truth_path: Path | None = None
+    data_dir: Path | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def generation_context(self) -> dict[str, Any]:
+        return {
+            "benchmark": "MatPlotBench",
+            "ground_truth_path": str(self.ground_truth_path) if self.ground_truth_path else None,
+            "data_dir": str(self.data_dir) if self.data_dir else None,
+            **dict(self.metadata),
+        }
+
+
+class MatplotBenchGenerationAdapter:
+    """Load MatPlotBench-like manifests for instruction-to-image generation runs.
+
+    This adapter deliberately keeps native instruction-only tasks separate from
+    table-to-chart tasks. If a record has no rows and no schema columns, the
+    generation mode is `instruction_only`; codegen should then rely only on
+    explicitly stated constants and visual structure in the prompt/context.
+    """
+
+    def __init__(
+        self,
+        manifest_path: str | Path,
+        *,
+        prefer_expert: bool = True,
+        case_ids: Iterable[str] | None = None,
+        limit: int | None = None,
+    ) -> None:
+        self.manifest_path = Path(manifest_path)
+        self.prefer_expert = prefer_expert
+        self.case_ids = tuple(str(case_id) for case_id in case_ids) if case_ids is not None else ()
+        self.limit = limit
+
+    def iter_cases(self) -> Iterable[MatplotBenchGenerationCase]:
+        selected = set(self.case_ids)
+        yielded = 0
+        for raw in self._load_records():
+            case = self._case_from_record(raw)
+            if selected and case.case_id not in selected and str(case.metadata.get("native_id", "")) not in selected:
+                continue
+            yield case
+            yielded += 1
+            if self.limit is not None and yielded >= self.limit:
+                break
+
+    def count(self) -> int:
+        return sum(1 for _ in self.iter_cases())
+
+    def _load_records(self) -> list[dict[str, Any]]:
+        if not self.manifest_path.exists():
+            raise FileNotFoundError(f"MatPlotBench generation manifest not found: {self.manifest_path}")
+        payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            for key in ("cases", "records", "data"):
+                if isinstance(payload.get(key), list):
+                    payload = payload[key]
+                    break
+        if not isinstance(payload, list):
+            raise ValueError("MatPlotBench generation manifest must contain a JSON list or an object with cases/records/data.")
+        return [dict(item) for item in payload]
+
+    def _case_from_record(self, raw: dict[str, Any]) -> MatplotBenchGenerationCase:
+        case_id = str(raw.get("case_id") or raw.get("id") or raw.get("native_id") or "matplotbench-case")
+        query = _matplotbench_query(raw, prefer_expert=self.prefer_expert)
+        schema = _matplotbench_schema(raw.get("schema"))
+        rows = tuple(dict(row) for row in (raw.get("rows") or ()))
+        generation_mode = str(raw.get("generation_mode") or _matplotbench_generation_mode(schema, rows))
+        ground_truth_path = _optional_path(raw.get("ground_truth_path"))
+        data_dir = _optional_path(raw.get("data_dir"))
+        metadata = {
+            "source_manifest": str(self.manifest_path),
+            "native_id": raw.get("native_id", raw.get("id")),
+            "score": raw.get("score"),
+            "failure_source": raw.get("failure_source"),
+            "failure_definition": raw.get("failure_definition"),
+            "selected_code_path": raw.get("selected_code_path") or raw.get("generated_code_path"),
+            "selected_log_path": raw.get("selected_log_path"),
+            "output_image_paths": raw.get("output_image_paths", ()),
+            "simple_instruction": raw.get("simple_instruction"),
+            "expert_instruction": raw.get("expert_instruction"),
+            **dict(raw.get("metadata") or {}),
+        }
+        return MatplotBenchGenerationCase(
+            case_id=case_id,
+            query=query,
+            schema=schema,
+            rows=rows,
+            generation_mode=generation_mode,
+            ground_truth_path=ground_truth_path,
+            data_dir=data_dir,
+            metadata={key: value for key, value in metadata.items() if value not in (None, "", [])},
+        )
+
+
+def _matplotbench_query(raw: dict[str, Any], *, prefer_expert: bool) -> str:
+    candidates = (
+        raw.get("query"),
+        raw.get("expert_instruction") if prefer_expert else raw.get("simple_instruction"),
+        raw.get("simple_instruction") if prefer_expert else raw.get("expert_instruction"),
+    )
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    raise ValueError("MatPlotBench generation record is missing query/simple_instruction/expert_instruction.")
+
+
+def _matplotbench_schema(raw_schema: Any) -> TableSchema:
+    if isinstance(raw_schema, dict):
+        columns = raw_schema.get("columns", raw_schema)
+        table_name = str(raw_schema.get("table_name", "table"))
+        if isinstance(columns, dict):
+            return TableSchema(columns={str(key): str(value) for key, value in columns.items()}, table_name=table_name)
+    return TableSchema(columns={})
+
+
+def _matplotbench_generation_mode(schema: TableSchema, rows: tuple[dict[str, Any], ...]) -> str:
+    if rows or schema.columns:
+        return "table"
+    return "instruction_only"
+
+
+def _optional_path(value: Any) -> Path | None:
+    text = str(value or "").strip()
+    return Path(text) if text else None
+
+@dataclass(frozen=True)
+class MatplotBenchEvalExportRecord:
+    case_id: str
+    native_id: int
+    workspace_dir: Path
+    image_path: Path | None
+    code_path: Path | None
+    manifest_path: Path | None = None
+    report_path: Path | None = None
+    skipped_reason: str | None = None
+
+    @property
+    def exported(self) -> bool:
+        return self.skipped_reason is None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "case_id": self.case_id,
+            "native_id": self.native_id,
+            "workspace_dir": str(self.workspace_dir),
+            "image_path": str(self.image_path) if self.image_path else None,
+            "code_path": str(self.code_path) if self.code_path else None,
+            "manifest_path": str(self.manifest_path) if self.manifest_path else None,
+            "report_path": str(self.report_path) if self.report_path else None,
+            "skipped_reason": self.skipped_reason,
+            "exported": self.exported,
+        }
+
+
+class MatplotBenchEvalWorkspaceExporter:
+    """Export generation outputs into the workspace layout expected by MatPlotBench eval_qwen.py."""
+
+    def __init__(
+        self,
+        generation_summary_path: str | Path,
+        workspace_dir: str | Path,
+        *,
+        image_filename: str = "novice_final.png",
+        code_filename: str = "code_action_groundedchart_initial_0.py",
+        overwrite: bool = True,
+    ) -> None:
+        self.generation_summary_path = Path(generation_summary_path)
+        self.workspace_dir = Path(workspace_dir)
+        self.image_filename = image_filename
+        self.code_filename = code_filename
+        self.overwrite = overwrite
+
+    def export(self) -> dict[str, Any]:
+        summary = self._load_summary()
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        records = [self._export_case(dict(case)) for case in summary.get("cases", [])]
+        exported_ids = sorted(record.native_id for record in records if record.exported)
+        manifest = {
+            "source_summary_path": str(self.generation_summary_path),
+            "workspace_dir": str(self.workspace_dir),
+            "total_cases": len(records),
+            "exported_cases": sum(1 for record in records if record.exported),
+            "skipped_cases": sum(1 for record in records if not record.exported),
+            "native_ids": exported_ids,
+            "records": [record.to_dict() for record in records],
+            "eval_qwen_commands_by_id": [
+                f"python evaluation/eval_qwen.py --workspace {self.workspace_dir} --start_id {native_id} --end_id {native_id} --workers 1"
+                for native_id in exported_ids
+            ],
+        }
+        manifest_path = self.workspace_dir / "groundedchart_eval_export_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        return manifest
+
+    def _load_summary(self) -> dict[str, Any]:
+        if not self.generation_summary_path.exists():
+            raise FileNotFoundError(f"Generation summary not found: {self.generation_summary_path}")
+        payload = json.loads(self.generation_summary_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
+            raise ValueError("Generation summary must be an object with a `cases` list.")
+        return payload
+
+    def _export_case(self, case: dict[str, Any]) -> MatplotBenchEvalExportRecord:
+        case_id = str(case.get("case_id") or "")
+        native_id = _native_id_from_generation_case(case)
+        if native_id is None:
+            return MatplotBenchEvalExportRecord(
+                case_id=case_id,
+                native_id=-1,
+                workspace_dir=self.workspace_dir,
+                image_path=None,
+                code_path=None,
+                skipped_reason="missing_native_id",
+            )
+        case_workspace = self.workspace_dir / f"example_{native_id}"
+        case_workspace.mkdir(parents=True, exist_ok=True)
+
+        image_source = _optional_path(case.get("image_path"))
+        code_source = _optional_path(case.get("final_code_path"))
+        if image_source is None or not image_source.exists():
+            return MatplotBenchEvalExportRecord(
+                case_id=case_id,
+                native_id=native_id,
+                workspace_dir=case_workspace,
+                image_path=None,
+                code_path=None,
+                skipped_reason="missing_image_path",
+            )
+        if code_source is None or not code_source.exists():
+            return MatplotBenchEvalExportRecord(
+                case_id=case_id,
+                native_id=native_id,
+                workspace_dir=case_workspace,
+                image_path=None,
+                code_path=None,
+                skipped_reason="missing_final_code_path",
+            )
+
+        target_image = case_workspace / self.image_filename
+        target_code = case_workspace / self.code_filename
+        _copy_file(image_source, target_image, overwrite=self.overwrite)
+        _copy_file(code_source, target_code, overwrite=self.overwrite)
+
+        copied_manifest = _copy_optional_generation_artifact(case.get("manifest_path"), case_workspace / "groundedchart_generation_manifest.json", overwrite=self.overwrite)
+        copied_report = _copy_optional_generation_artifact(case.get("report_path"), case_workspace / "groundedchart_generation_report.json", overwrite=self.overwrite)
+        (case_workspace / "workflow.log").write_text(
+            "GroundedChart export for MatPlotBench evaluation\n"
+            f"case_id: {case_id}\n"
+            f"native_id: {native_id}\n"
+            f"source_image: {image_source}\n"
+            f"source_code: {code_source}\n",
+            encoding="utf-8",
+        )
+        return MatplotBenchEvalExportRecord(
+            case_id=case_id,
+            native_id=native_id,
+            workspace_dir=case_workspace,
+            image_path=target_image,
+            code_path=target_code,
+            manifest_path=copied_manifest,
+            report_path=copied_report,
+        )
+
+
+def _native_id_from_generation_case(case: dict[str, Any]) -> int | None:
+    metadata = case.get("metadata") if isinstance(case.get("metadata"), dict) else {}
+    candidates = (metadata.get("native_id"), case.get("native_id"), case.get("id"))
+    for candidate in candidates:
+        try:
+            if candidate is not None and str(candidate).strip() != "":
+                return int(candidate)
+        except (TypeError, ValueError):
+            pass
+    match = re.search(r"(?:^|[-_])(?:failed[-_])?(\d+)$", str(case.get("case_id") or ""))
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _copy_optional_generation_artifact(source: Any, target: Path, *, overwrite: bool) -> Path | None:
+    source_path = _optional_path(source)
+    if source_path is None or not source_path.exists():
+        return None
+    _copy_file(source_path, target, overwrite=overwrite)
+    return target
+
+
+def _copy_file(source: Path, target: Path, *, overwrite: bool) -> None:
+    if target.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing file: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)

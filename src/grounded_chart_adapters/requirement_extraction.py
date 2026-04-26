@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from collections import Counter
@@ -363,6 +363,8 @@ def _requirement_plan_to_dict(plan) -> dict[str, Any] | None:
                 "priority": requirement.priority,
                 "panel_id": requirement.panel_id,
                 "assumption": requirement.assumption,
+                "severity": requirement.severity,
+                "match_policy": requirement.match_policy,
                 "is_verifiable": requirement.is_verifiable,
             }
             for requirement in plan.requirements

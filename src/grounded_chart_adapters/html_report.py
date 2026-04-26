@@ -31,6 +31,10 @@ def _compact_case(case: dict[str, Any]) -> dict[str, Any]:
     case_metadata = dict(case.get("case_metadata") or {})
     figure_requirements = dict(case.get("figure_requirements") or {})
     actual_figure = dict(case.get("actual_figure") or {})
+    requirement_metrics = dict(case.get("requirement_metrics") or {})
+    failure_taxonomy = dict(case.get("failure_taxonomy") or {})
+    artifact_chain_summary = list(case.get("artifact_chain_summary") or [])
+    failure_atoms = list(case.get("failure_atoms") or [])
     expected_axes = list(figure_requirements.get("axes") or [])
     actual_axes = list(actual_figure.get("axes") or [])
 
@@ -38,6 +42,7 @@ def _compact_case(case: dict[str, Any]) -> dict[str, Any]:
         "case_id": case.get("case_id"),
         "status": case.get("status"),
         "query": case.get("query"),
+        "parse_source": case.get("parse_source"),
         "expected_chart_type": case.get("expected_chart_type"),
         "actual_chart_type": case.get("actual_chart_type"),
         "backend_profile": backend_profile,
@@ -49,6 +54,10 @@ def _compact_case(case: dict[str, Any]) -> dict[str, Any]:
         "repair_instruction": case.get("repair_instruction"),
         "exception_type": case.get("exception_type"),
         "exception_message": case.get("exception_message"),
+        "requirement_metrics": requirement_metrics,
+        "failure_taxonomy": failure_taxonomy,
+        "artifact_chain_summary": artifact_chain_summary[:6],
+        "failure_atoms": failure_atoms[:6],
         "query_preview": _truncate(str(case.get("query") or ""), 180),
         "reason": case_metadata.get("reason"),
         "source_code": case_metadata.get("source_code"),
@@ -427,6 +436,14 @@ def _render_html(payload: dict[str, Any]) -> str:
           <h2>Error Families</h2>
           <div id="error-counts" class="chips"></div>
         </section>
+        <section class="band">
+          <h2>Failure Stages</h2>
+          <div id="failure-stage-counts" class="chips"></div>
+        </section>
+        <section class="band">
+          <h2>Requirement Families</h2>
+          <div id="failed-requirement-type-counts" class="chips"></div>
+        </section>
       </div>
     </section>
 
@@ -473,6 +490,8 @@ def _render_html(payload: dict[str, Any]) -> str:
         ['Errored', summary.errored_cases],
         ['Completion Rate', formatRatio(summary.completion_rate)],
         ['Overall Pass Rate', formatRatio(summary.overall_pass_rate)],
+        ['Req Coverage', formatRatio(summary.requirement_coverage)],
+        ['Req Satisfaction', formatRatio(summary.requirement_satisfaction)],
       ];
       document.getElementById('summary-grid').innerHTML = metricSpecs.map(([label, value]) => `
         <article class="metric">
@@ -485,6 +504,8 @@ def _render_html(payload: dict[str, Any]) -> str:
       renderCountChips('verification-counts', summary.backend_verification_mode_counts || {{}});
       renderCountChips('repair-counts', summary.repair_scope_counts || {{}});
       renderCountChips('error-counts', summary.error_counts || {{}});
+      renderCountChips('failure-stage-counts', summary.failure_stage_counts || {{}});
+      renderCountChips('failed-requirement-type-counts', summary.failed_requirement_type_counts || {{}});
     }}
 
     function renderCountChips(containerId, counts) {{
@@ -543,6 +564,7 @@ def _render_html(payload: dict[str, Any]) -> str:
         item.backend_profile?.backend_name,
         item.backend_profile?.verification_mode,
         item.repair_scope,
+        ...((item.failure_atoms || []).map((atom) => atom.mismatch_type || atom.suggested_action_scope || "")),
         ...(item.error_codes || []),
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(query);
@@ -551,6 +573,10 @@ def _render_html(payload: dict[str, Any]) -> str:
     function renderCaseCard(item) {{
       const statusClass = `status-${{item.status || 'failed'}}`;
       const backend = item.backend_profile || {{}};
+      const requirementMetrics = item.requirement_metrics || {{}};
+      const failureTaxonomy = item.failure_taxonomy || {{}};
+      const artifactChains = item.artifact_chain_summary || [];
+      const failureAtoms = item.failure_atoms || [];
       const sourcePath = item.source_code ? `<a class="path-link mono" href="${{toFileHref(item.source_code)}}">${{escapeHtml(item.source_code)}}</a>` : '<span class="mono">n/a</span>';
       const expectedFigure = item.expected_figure || {{}};
       const actualFigure = item.actual_figure || {{}};
@@ -567,11 +593,14 @@ def _render_html(payload: dict[str, Any]) -> str:
             <div>
               <h2 class="case-id">${{escapeHtml(item.case_id || 'unknown-case')}}</h2>
               <div class="case-query">${{escapeHtml(item.query_preview || item.query || '')}}</div>
-              <div class="badge-row">
-                <span class="badge ${{statusClass}}">${{escapeHtml(item.status || 'unknown')}}</span>
-                <span class="badge badge-neutral">${{escapeHtml(backend.backend_name || 'unknown')}}</span>
-                <span class="badge badge-neutral">${{escapeHtml(backend.verification_mode || 'none')}}</span>
+                <div class="badge-row">
+                  <span class="badge ${{statusClass}}">${{escapeHtml(item.status || 'unknown')}}</span>
+                  <span class="badge badge-neutral">${{escapeHtml(item.parse_source || 'predicted')}}</span>
+                  <span class="badge badge-neutral">${{escapeHtml(backend.backend_name || 'unknown')}}</span>
+                  <span class="badge badge-neutral">${{escapeHtml(backend.verification_mode || 'none')}}</span>
                 <span class="badge badge-neutral">${{escapeHtml(item.repair_scope || 'none')}}</span>
+                <span class="badge badge-neutral">${{escapeHtml(failureTaxonomy.primary_stage || 'none')}}</span>
+                <span class="badge badge-neutral">${{escapeHtml(failureTaxonomy.primary_family || 'none')}}</span>
                 <span class="badge badge-neutral">native id: ${{escapeHtml(String(item.native_id ?? 'n/a'))}}</span>
               </div>
             </div>
@@ -595,6 +624,7 @@ def _render_html(payload: dict[str, Any]) -> str:
             <section class="case-panel">
               <h3>Reason</h3>
               <div>${{escapeHtml(item.reason || 'No benchmark-side reason recorded.')}}</div>
+              <div style="margin-top:10px;color:var(--muted);">${{escapeHtml(failureTaxonomy.reason || '')}}</div>
             </section>
             <section class="case-panel">
               <h3>Error Codes</h3>
@@ -606,6 +636,17 @@ def _render_html(payload: dict[str, Any]) -> str:
                 <div>File</div><div>${{sourcePath}}</div>
                 <div>Failure Family</div><div>${{escapeHtml(item.expected_failure_family || 'n/a')}}</div>
                 <div>Exception</div><div>${{escapeHtml(item.exception_type || 'n/a')}}</div>
+              </div>
+            </section>
+            <section class="case-panel">
+              <h3>Requirements</h3>
+              <div class="kv">
+                <div>Total</div><div>${{escapeHtml(String(requirementMetrics.total_requirements ?? 'n/a'))}}</div>
+                <div>Verifiable</div><div>${{escapeHtml(String(requirementMetrics.verifiable_requirements ?? 'n/a'))}}</div>
+                <div>Passed</div><div>${{escapeHtml(String(requirementMetrics.passed_requirements ?? 'n/a'))}}</div>
+                <div>Failed</div><div>${{escapeHtml(String(requirementMetrics.failed_requirements ?? 'n/a'))}}</div>
+                <div>Abstained</div><div>${{escapeHtml(String(requirementMetrics.abstained_requirements ?? 'n/a'))}}</div>
+                <div>Coverage</div><div>${{escapeHtml(formatRatio(requirementMetrics.requirement_coverage))}}</div>
               </div>
             </section>
           </div>
@@ -633,6 +674,14 @@ def _render_html(payload: dict[str, Any]) -> str:
               <section class="case-panel">
                 <h3>Error Detail</h3>
                 <div class="mono">${{errors.length ? errors.map(renderErrorLine).join('<br>') : 'n/a'}}</div>
+              </section>
+              <section class="case-panel">
+                <h3>Evidence Chain</h3>
+                <div class="mono">${{artifactChains.length ? artifactChains.map(renderArtifactChainLine).join('<br><br>') : 'n/a'}}</div>
+              </section>
+              <section class="case-panel">
+                <h3>Failure Atoms</h3>
+                <div class="mono">${{failureAtoms.length ? failureAtoms.map(renderFailureAtomLine).join('<br><br>') : 'n/a'}}</div>
               </section>
               <section class="case-panel">
                 <h3>Repair</h3>
@@ -671,6 +720,25 @@ def _render_html(payload: dict[str, Any]) -> str:
         error.actual !== undefined ? `actual=${{compactJson(error.actual)}}` : null,
       ].filter(Boolean);
       return escapeHtml(bits.join(' | '));
+    }}
+
+    function renderArtifactChainLine(chain) {{
+      const bits = [
+        chain.diagnosis || `${{chain.requirement_id || 'unknown'}}: ${{chain.verdict || 'unknown'}}`,
+        chain.expected_preview !== undefined ? `expected=${{compactJson(chain.expected_preview)}}` : null,
+        chain.actual_preview !== undefined ? `actual=${{compactJson(chain.actual_preview)}}` : null,
+      ].filter(Boolean);
+      return escapeHtml(bits.join('\n'));
+    }}
+
+    function renderFailureAtomLine(atom) {{
+      const bits = [
+        atom.evidence_summary || `${{atom.requirement_id || 'unknown'}}: ${{atom.mismatch_type || 'unknown'}}`,
+        atom.suggested_action_scope ? `scope=${{atom.suggested_action_scope}}` : null,
+        atom.expected_preview !== undefined ? `expected=${{compactJson(atom.expected_preview)}}` : null,
+        atom.actual_preview !== undefined ? `actual=${{compactJson(atom.actual_preview)}}` : null,
+      ].filter(Boolean);
+      return escapeHtml(bits.join('\n'));
     }}
 
     function compactJson(value) {{

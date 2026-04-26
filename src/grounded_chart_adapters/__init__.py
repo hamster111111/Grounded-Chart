@@ -9,6 +9,10 @@ from grounded_chart_adapters.batch import BatchRunner, BatchRunResult
 from grounded_chart_adapters.html_report import write_batch_report_html
 from grounded_chart_adapters.json_case import JsonCaseAdapter
 from grounded_chart_adapters.matplotbench import (
+    MatplotBenchGenerationAdapter,
+    MatplotBenchGenerationCase,
+    MatplotBenchEvalExportRecord,
+    MatplotBenchEvalWorkspaceExporter,
     MatplotBenchInstructionAdapter,
     MatplotBenchRecord,
     MatplotBenchWorkspaceAdapter,
@@ -34,6 +38,10 @@ __all__ = [
     "ChartCase",
     "InMemoryCaseAdapter",
     "JsonCaseAdapter",
+    "MatplotBenchGenerationAdapter",
+    "MatplotBenchGenerationCase",
+    "MatplotBenchEvalExportRecord",
+    "MatplotBenchEvalWorkspaceExporter",
     "MatplotBenchInstructionAdapter",
     "MatplotBenchRecord",
     "MatplotBenchWorkspaceAdapter",

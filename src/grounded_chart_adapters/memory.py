@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Iterable
 
@@ -23,6 +23,7 @@ class InMemoryCaseAdapter:
         for case in self.iter_cases():
             source_path = case.metadata.get("source_code")
             execution_dir = case.metadata.get("execution_dir")
+            verify_data = case.verification_mode in {"full", "figure_and_data"} or case.expected_trace is not None
             run_trace = runner.run_code_with_figure(
                 case.generated_code,
                 globals_dict={"rows": list(case.rows)},
@@ -37,9 +38,13 @@ class InMemoryCaseAdapter:
                 generated_code=case.generated_code,
                 expected_figure=case.figure_requirements,
                 actual_figure=run_trace.figure_trace,
-                verify_data=case.verification_mode == "full",
+                verify_data=verify_data,
                 execution_dir=execution_dir,
                 file_path=source_path,
+                case_metadata=case.metadata,
+                parsed_requirements=case.parsed_requirements,
+                parse_source=case.parse_source,
+                expected_trace_override=case.expected_trace,
             )
             results.append(AdapterRunResult(case=case, pipeline_result=pipeline_result))
         return results

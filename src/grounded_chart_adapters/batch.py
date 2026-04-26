@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +39,7 @@ class BatchRunner:
                 execution_dir = case.metadata.get("execution_dir")
                 if execution_dir is None and source_path:
                     execution_dir = str(Path(source_path).resolve().parent)
+                verify_data = case.verification_mode in {"full", "figure_and_data"} or case.expected_trace is not None
                 run_trace = self.trace_runner.run_code_with_figure(
                     case.generated_code,
                     globals_dict={"rows": list(case.rows)},
@@ -53,9 +54,13 @@ class BatchRunner:
                     generated_code=case.generated_code,
                     expected_figure=case.figure_requirements,
                     actual_figure=run_trace.figure_trace,
-                    verify_data=case.verification_mode == "full",
+                    verify_data=verify_data,
                     execution_dir=execution_dir,
                     file_path=source_path,
+                    case_metadata=case.metadata,
+                    parsed_requirements=case.parsed_requirements,
+                    parse_source=case.parse_source,
+                    expected_trace_override=case.expected_trace,
                 )
                 run_result = AdapterRunResult(case=case, pipeline_result=pipeline_result)
                 run_results.append(run_result)
@@ -75,9 +80,13 @@ class BatchRunner:
                         generated_code=case.generated_code,
                         execution_exception=exc,
                         expected_figure=case.figure_requirements,
-                        verify_data=case.verification_mode == "full",
+                        verify_data=verify_data,
                         execution_dir=execution_dir,
                         file_path=source_path,
+                        case_metadata=case.metadata,
+                        parsed_requirements=case.parsed_requirements,
+                        parse_source=case.parse_source,
+                        expected_trace_override=case.expected_trace,
                     )
                     run_result = AdapterRunResult(
                         case=case,

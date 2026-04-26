@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, Protocol
 
-from grounded_chart.schema import FigureRequirementSpec, PipelineResult, TableSchema
+from grounded_chart.schema import FigureRequirementSpec, ParsedRequirementBundle, PipelineResult, PlotTrace, TableSchema
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,10 @@ class ChartCase:
     rows: tuple[dict[str, Any], ...]
     generated_code: str
     figure_requirements: FigureRequirementSpec | None = None
-    verification_mode: Literal["full", "figure_only"] = "full"
+    verification_mode: Literal["full", "figure_only", "figure_and_data"] = "full"
+    expected_trace: PlotTrace | None = None
+    parsed_requirements: ParsedRequirementBundle | None = None
+    parse_source: Literal["predicted", "oracle"] = "predicted"
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
