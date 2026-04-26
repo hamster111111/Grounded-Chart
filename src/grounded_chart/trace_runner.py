@@ -1,14 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import math
 import json
+import types
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
 from unittest.mock import patch
 
+from grounded_chart.code_structure import extract_code_structure_artifacts
 from grounded_chart.schema import ArtistTrace, AxisTrace, ChartType, DataPoint, FigureTrace, PlotTrace
 
 
@@ -73,6 +75,7 @@ class MatplotlibTraceRunner:
         records: list[PlotTrace] = []
         resolved_execution_dir = Path(execution_dir).resolve() if execution_dir is not None else None
         resolved_file_path = Path(file_path).resolve() if file_path is not None else None
+        code_structure_artifacts = extract_code_structure_artifacts(code)
         plotly_state: dict[str, Any] = {
             "backend_used": False,
             "figure": None,
@@ -170,6 +173,7 @@ class MatplotlibTraceRunner:
         }
         if globals_dict:
             exec_globals.update(globals_dict)
+        initial_global_keys = set(exec_globals)
 
         patchers = [
             patch.object(matplotlib.axes.Axes, "bar", axes_bar),
@@ -202,7 +206,17 @@ class MatplotlibTraceRunner:
                 plot_trace = PlotTrace(chart_type="unknown", points=(), source="matplotlib_trace_runner", raw={"trace_error": "no_supported_plot_call"})
             else:
                 plot_trace = records[0]
+        plot_trace = self._attach_actual_intermediate_artifacts(plot_trace, exec_globals, initial_global_keys)
+        figure_trace = self._attach_code_structure_artifacts(figure_trace, code_structure_artifacts)
         return MatplotlibRunTrace(plot_trace=plot_trace, figure_trace=figure_trace)
+
+
+    def _attach_code_structure_artifacts(self, figure_trace: FigureTrace, artifacts: tuple[dict[str, Any], ...]) -> FigureTrace:
+        if not artifacts:
+            return figure_trace
+        raw = dict(figure_trace.raw)
+        raw["code_structure_artifacts"] = [dict(artifact) for artifact in artifacts]
+        return replace(figure_trace, raw=raw)
 
     def _trace_xy(self, chart_type: ChartType, x_values: Any, y_values: Any, source: str, raw: dict[str, Any] | None = None) -> PlotTrace:
         xs = self._as_list(x_values)
@@ -245,6 +259,209 @@ class MatplotlibTraceRunner:
             return int(value)
         return value
 
+    def _attach_actual_intermediate_artifacts(
+        self,
+        plot_trace: PlotTrace,
+        exec_globals: dict[str, Any],
+        initial_global_keys: set[str],
+    ) -> PlotTrace:
+        variables = self._extract_data_variables(exec_globals, initial_global_keys)
+        if not variables:
+            return plot_trace
+        artifacts = self._semantic_data_variable_artifacts(variables)
+        artifacts.append(
+            {
+                "artifact_id": "actual.data_variables",
+                "stage": "execution_globals",
+                "requirement_names": ["execution_globals"],
+                "payload": variables,
+            }
+        )
+        raw = dict(plot_trace.raw)
+        raw["actual_intermediate_artifacts"] = artifacts
+        return replace(plot_trace, raw=raw)
+
+    def _semantic_data_variable_artifacts(self, variables: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        sequence_candidates: list[dict[str, Any]] = []
+        table_candidates: list[dict[str, Any]] = []
+        aggregate_candidates: list[dict[str, Any]] = []
+        for variable in variables:
+            name = str(variable.get("name") or "")
+            preview = variable.get("preview")
+            if isinstance(preview, list):
+                sequence_role = self._sequence_role(preview)
+                if sequence_role is not None:
+                    sequence_candidates.append(
+                        {
+                            "name": name,
+                            "role": sequence_role,
+                            "length": len(preview),
+                            "preview": preview,
+                        }
+                    )
+                point_table = self._point_table_from_sequence(preview)
+                if point_table:
+                    table_candidates.append({"name": name, "points": point_table})
+            elif isinstance(preview, dict):
+                point_table = self._point_table_from_mapping(preview)
+                if point_table:
+                    aggregate_candidates.append({"name": name, "points": point_table})
+
+        payload: dict[str, Any] = {}
+        if sequence_candidates:
+            payload["sequence_candidates"] = sequence_candidates
+        if table_candidates:
+            payload["point_table_candidates"] = table_candidates
+        if aggregate_candidates:
+            payload["aggregate_table_candidates"] = aggregate_candidates
+        if not payload:
+            return []
+        artifacts = [
+            {
+                "artifact_id": "actual.semantic_data_variables",
+                "stage": "execution_globals_semantic",
+                "requirement_names": ["execution_globals_semantic"],
+                "payload": payload,
+            }
+        ]
+        if sequence_candidates:
+            artifacts.append(
+                {
+                    "artifact_id": "actual.sequence_candidates",
+                    "stage": "execution_globals_sequences",
+                    "requirement_names": ["dimensions", "measure_column"],
+                    "payload": sequence_candidates,
+                }
+            )
+        if table_candidates:
+            artifacts.append(
+                {
+                    "artifact_id": "actual.candidate_point_tables",
+                    "stage": "execution_globals_point_tables",
+                    "requirement_names": ["dimensions", "measure_column", "aggregation"],
+                    "payload": table_candidates,
+                }
+            )
+        if aggregate_candidates:
+            artifacts.append(
+                {
+                    "artifact_id": "actual.candidate_aggregate_tables",
+                    "stage": "execution_globals_aggregate_tables",
+                    "requirement_names": ["dimensions", "measure_column", "aggregation"],
+                    "payload": aggregate_candidates,
+                }
+            )
+        return artifacts
+
+    def _sequence_role(self, values: list[Any]) -> str | None:
+        if not values:
+            return None
+        scalar_values = [value for value in values if self._is_scalar_preview(value)]
+        if len(scalar_values) != len(values):
+            return None
+        numeric_count = sum(1 for value in scalar_values if self._is_number_like(value))
+        if numeric_count == len(scalar_values):
+            return "numeric_sequence"
+        if numeric_count == 0:
+            return "categorical_sequence"
+        return "mixed_sequence"
+
+    def _point_table_from_mapping(self, values: dict[Any, Any]) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        for key, value in values.items():
+            if not self._is_number_like(value):
+                return []
+            points.append({"x": key, "y": value})
+        return points
+
+    def _point_table_from_sequence(self, values: list[Any]) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        for item in values:
+            if isinstance(item, dict):
+                if "x" in item and "y" in item and self._is_number_like(item.get("y")):
+                    points.append({"x": item.get("x"), "y": item.get("y")})
+                    continue
+                return []
+            if isinstance(item, (list, tuple)) and len(item) >= 2 and self._is_number_like(item[1]):
+                points.append({"x": item[0], "y": item[1]})
+                continue
+            return []
+        return points
+
+    def _is_number_like(self, value: Any) -> bool:
+        if isinstance(value, bool) or value is None:
+            return False
+        try:
+            float(value)
+        except (TypeError, ValueError):
+            return False
+        return True
+
+    def _extract_data_variables(self, exec_globals: dict[str, Any], initial_global_keys: set[str]) -> list[dict[str, Any]]:
+        variables: list[dict[str, Any]] = []
+        for name, value in sorted(exec_globals.items(), key=lambda item: item[0]):
+            if name in initial_global_keys or name.startswith("__"):
+                continue
+            preview = self._data_variable_preview(value)
+            if preview is None:
+                continue
+            variables.append(
+                {
+                    "name": name,
+                    "type": type(value).__name__,
+                    "preview": preview,
+                }
+            )
+        return variables[:30]
+
+    def _data_variable_preview(self, value: Any) -> Any | None:
+        if isinstance(value, types.ModuleType) or callable(value):
+            return None
+        if self._is_scalar_preview(value):
+            return value
+        if isinstance(value, range):
+            return list(value)[:20]
+        if isinstance(value, dict):
+            return {str(key): self._jsonable_preview(item) for key, item in list(value.items())[:20]}
+        if isinstance(value, (list, tuple, set)):
+            return [self._jsonable_preview(item) for item in list(value)[:20]]
+        if hasattr(value, "head") and hasattr(value, "to_dict"):
+            try:
+                return self._jsonable_preview(value.head(20).to_dict(orient="records"))
+            except TypeError:
+                try:
+                    return self._jsonable_preview(value.head(20).to_dict())
+                except Exception:
+                    return None
+            except Exception:
+                return None
+        if hasattr(value, "tolist"):
+            try:
+                converted = value.tolist()
+            except Exception:
+                return None
+            return self._jsonable_preview(converted[:20] if isinstance(converted, list) else converted)
+        return None
+
+    def _jsonable_preview(self, value: Any) -> Any:
+        if self._is_scalar_preview(value):
+            return value
+        if isinstance(value, range):
+            return list(value)[:20]
+        if isinstance(value, dict):
+            return {str(key): self._jsonable_preview(item) for key, item in list(value.items())[:20]}
+        if isinstance(value, (list, tuple, set)):
+            return [self._jsonable_preview(item) for item in list(value)[:20]]
+        if hasattr(value, "item"):
+            try:
+                return self._jsonable_preview(value.item())
+            except Exception:
+                pass
+        return str(value)
+
+    def _is_scalar_preview(self, value: Any) -> bool:
+        return value is None or isinstance(value, (str, bool, int, float))
+
     def _figure_trace(self, plt: Any) -> FigureTrace:
         fig = plt.gcf()
         semantic_axes = [ax for ax in fig.axes if not self._is_helper_axis(ax)]
@@ -254,6 +471,10 @@ class MatplotlibTraceRunner:
         title = ""
         if getattr(fig, "_suptitle", None) is not None:
             title = fig._suptitle.get_text()
+        figure_lines = tuple(getattr(fig, "lines", ()))
+        figure_patches = tuple(getattr(fig, "patches", ()))
+        figure_patch_types = [type(patch_item).__name__ for patch_item in figure_patches]
+        connection_patch_count = sum(1 for name in figure_patch_types if name in {"ConnectionPatch", "FancyArrowPatch"})
         return FigureTrace(
             title=title,
             size_inches=(round(float(width), 4), round(float(height), 4)),
@@ -263,6 +484,17 @@ class MatplotlibTraceRunner:
                 "total_axes_count": len(fig.axes),
                 "helper_axes_count": len(helper_axes),
                 "helper_axis_labels": [str(ax.get_label() or "") for ax in helper_axes],
+                "figure_line_count": len(figure_lines),
+                "figure_line_styles": [
+                    {
+                        "color": str(line.get_color()) if hasattr(line, "get_color") else None,
+                        "linewidth": float(line.get_linewidth()) if hasattr(line, "get_linewidth") else None,
+                    }
+                    for line in figure_lines
+                ],
+                "figure_patch_count": len(figure_patches),
+                "figure_connection_patch_count": connection_patch_count,
+                "figure_patch_types": figure_patch_types,
             },
         )
 

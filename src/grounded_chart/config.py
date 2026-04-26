@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import tomllib
@@ -16,10 +16,12 @@ class AblationRunConfig:
     parser_backend: str = "heuristic"
     repair_backend: str = "rule"
     repair_tier_mode: str = "rule_only"
+    repair_policy_mode: str = "strict"
     enable_repair_loop: bool = True
     max_repair_rounds: int = 2
     parser_provider: OpenAICompatibleConfig | None = None
     repair_provider: OpenAICompatibleConfig | None = None
+    codegen_provider: OpenAICompatibleConfig | None = None
 
 
 def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
@@ -31,12 +33,17 @@ def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
     default_provider = _provider_from_mapping(llm.get("default", {}))
     parser_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("parser", {})))
     repair_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("repair", {})))
+    codegen_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("codegen", {})))
 
     parser_backend = _normalized_backend(run.get("parser_backend", "heuristic"), allowed={"heuristic", "llm"})
     repair_backend = _normalized_backend(run.get("repair_backend", "rule"), allowed={"rule", "llm", "tiered"})
     repair_tier_mode = _normalized_backend(
         run.get("repair_tier_mode", "rule_only"),
         allowed={"rule_only", "hybrid", "llm_only"},
+    )
+    repair_policy_mode = _normalized_backend(
+        run.get("repair_policy_mode", "strict"),
+        allowed={"strict", "exploratory"},
     )
 
     if parser_backend == "llm" and parser_provider is None:
@@ -50,10 +57,12 @@ def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
         parser_backend=parser_backend,
         repair_backend=repair_backend,
         repair_tier_mode=repair_tier_mode,
+        repair_policy_mode=repair_policy_mode,
         enable_repair_loop=bool(run.get("enable_repair_loop", True)),
         max_repair_rounds=int(run.get("max_repair_rounds", 2)),
         parser_provider=_resolve_provider_secret(parser_provider),
         repair_provider=_resolve_provider_secret(repair_provider),
+        codegen_provider=_resolve_provider_secret(codegen_provider),
     )
 
 
@@ -64,19 +73,26 @@ def load_ablation_run_config_from_env() -> AblationRunConfig:
         os.environ.get("GCHART_REPAIR_TIER_MODE", "rule_only"),
         allowed={"rule_only", "hybrid", "llm_only"},
     )
+    repair_policy_mode = _normalized_backend(
+        os.environ.get("GCHART_REPAIR_POLICY_MODE", "strict"),
+        allowed={"strict", "exploratory"},
+    )
     default_provider = _provider_from_env("GCHART") if "GCHART_MODEL" in os.environ else None
     parser_provider = _provider_from_env("GCHART_PARSER") if "GCHART_PARSER_MODEL" in os.environ else default_provider
     repair_provider = _provider_from_env("GCHART_REPAIR") if "GCHART_REPAIR_MODEL" in os.environ else default_provider
+    codegen_provider = _provider_from_env("GCHART_CODEGEN") if "GCHART_CODEGEN_MODEL" in os.environ else default_provider
     return AblationRunConfig(
         bench_name=os.environ.get("GCHART_BENCH", "repair_loop_bench"),
         output_name=os.environ.get("GCHART_OUTPUT_NAME"),
         parser_backend=parser_backend,
         repair_backend=repair_backend,
         repair_tier_mode=repair_tier_mode,
+        repair_policy_mode=repair_policy_mode,
         enable_repair_loop=os.environ.get("GCHART_ENABLE_REPAIR_LOOP", "1").strip() not in {"0", "false", "False"},
         max_repair_rounds=int(os.environ.get("GCHART_MAX_REPAIR_ROUNDS", "2")),
         parser_provider=parser_provider,
         repair_provider=repair_provider,
+        codegen_provider=codegen_provider,
     )
 
 

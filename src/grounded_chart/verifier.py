@@ -1,9 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from math import isclose
 from typing import Any
 
 from grounded_chart.schema import AxisTrace, FigureRequirementSpec, FigureTrace, PlotTrace, VerificationError, VerificationReport
+from grounded_chart.visual_artifacts import verify_expected_visual_artifacts
 
 
 class OperatorLevelVerifier:
@@ -185,6 +186,9 @@ class OperatorLevelVerifier:
                     requirement_id=self._first_requirement_id(expected.provenance.get("size_inches", ())),
                 )
             )
+
+        if expected.artifact_contracts:
+            errors.extend(verify_expected_visual_artifacts(expected.artifact_contracts, actual))
 
         axes_by_index = {axis.index: axis for axis in actual.axes}
         for axis_requirement in expected.axes:

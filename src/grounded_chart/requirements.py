@@ -3,15 +3,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-RequirementScope = Literal["figure", "panel", "shared"]
+RequirementScope = Literal["figure", "panel", "shared", "any_visible"]
 RequirementType = Literal["data_operation", "encoding", "annotation", "presentation_constraint", "figure_composition"]
 RequirementStatus = Literal["explicit", "inferred", "assumed", "ambiguous", "unsupported"]
 RequirementPriority = Literal["core", "secondary"]
+RequirementSeverity = Literal["error", "warning", "info"]
+RequirementMatchPolicy = Literal[
+    "exact",
+    "contains",
+    "normalized_contains",
+    "numeric_close",
+    "sequence_exact",
+    "presence",
+]
 
 
 @dataclass(frozen=True)
 class RequirementNode:
-    """Atomic chart requirement with source provenance."""
+    """Atomic chart requirement with source provenance and verifier policy."""
 
     requirement_id: str
     scope: RequirementScope
@@ -25,6 +34,8 @@ class RequirementNode:
     priority: RequirementPriority = "core"
     panel_id: str | None = None
     assumption: str | None = None
+    severity: RequirementSeverity = "error"
+    match_policy: RequirementMatchPolicy = "exact"
 
     @property
     def is_verifiable(self) -> bool:

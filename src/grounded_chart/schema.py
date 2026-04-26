@@ -1,8 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 
+from grounded_chart.llm import LLMCompletionTrace
+from grounded_chart.patch_ops import PatchOperation
 from grounded_chart.requirements import ChartRequirementPlan, EvidenceGraph
 
 if TYPE_CHECKING:
@@ -13,6 +15,7 @@ ChartType = Literal["bar", "line", "pie", "scatter", "area", "heatmap", "box", "
 FilterOp = Literal["eq", "ne", "gt", "gte", "lt", "lte", "contains"]
 SortTarget = Literal["dimension", "measure"]
 SortDirection = Literal["asc", "desc"]
+RepairLoopAction = Literal["continue", "stop", "escalate"]
 
 
 @dataclass(frozen=True)
@@ -161,6 +164,7 @@ class AxisRequirementSpec:
     min_artist_counts: dict[str, int] = field(default_factory=dict)
     text_contains: tuple[str, ...] = ()
     provenance: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    source_spans: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -172,6 +176,8 @@ class FigureRequirementSpec:
     size_inches: tuple[float, float] | None = None
     axes: tuple[AxisRequirementSpec, ...] = ()
     provenance: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    source_spans: dict[str, str] = field(default_factory=dict)
+    artifact_contracts: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -183,6 +189,7 @@ class VerificationError:
     operator: str | None = None
     requirement_id: str | None = None
     severity: Literal["info", "warning", "error"] = "error"
+    match_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +213,10 @@ class RepairPatch:
     target_error_codes: tuple[str, ...]
     repair_plan: RepairPlan | None = None
     repaired_code: str | None = None
+    loop_signal: RepairLoopAction | None = None
+    loop_reason: str | None = None
+    llm_trace: LLMCompletionTrace | None = None
+    patch_ops: tuple[PatchOperation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -222,6 +233,11 @@ class RepairAttempt:
     unresolved_requirement_ids: tuple[str, ...] = ()
     report_ok: bool = False
     instruction: str = ""
+    decision_action: RepairLoopAction | None = None
+    decision_reason: str = ""
+    decision_next_scope: str | None = None
+    llm_trace: LLMCompletionTrace | None = None
+    patch_ops: tuple[PatchOperation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,5 +254,9 @@ class PipelineResult:
     repair: RepairPatch | None = None
     repaired_code: str | None = None
     repair_attempts: tuple[RepairAttempt, ...] = ()
+    repair_loop_status: str | None = None
+    repair_loop_reason: str | None = None
     execution_exception_type: str | None = None
     execution_exception_message: str | None = None
+    parse_source: str = "predicted"
+    parser_raw_response: dict[str, Any] = field(default_factory=dict)

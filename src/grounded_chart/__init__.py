@@ -1,4 +1,4 @@
-"""GroundedChart: execution-grounded verification for language-to-chart generation."""
+﻿"""GroundedChart: execution-grounded verification for language-to-chart generation."""
 
 from grounded_chart.canonical_executor import CanonicalExecutor
 from grounded_chart.backend import (
@@ -11,8 +11,20 @@ from grounded_chart.backend import (
     infer_backend_profile,
 )
 from grounded_chart.config import AblationRunConfig, load_ablation_run_config, load_ablation_run_config_from_env
+from grounded_chart.diagnostics import FailureAtom, failure_atoms_from_evidence_graph, failure_atoms_to_dicts
+from grounded_chart.expected_artifacts import (
+    ExpectedArtifactNode,
+    ExpectedTraceExtraction,
+    ExplicitPointExpectedTraceExtractor,
+    LLMExpectedArtifactExtractor,
+    StructuredExpectedArtifacts,
+    compile_expected_artifacts_to_figure,
+    extract_expected_trace_from_text,
+    extract_expected_trace_from_texts,
+)
 from grounded_chart.evidence import (
     attach_figure_requirements,
+    bind_requirement_policy_to_verification,
     build_evidence_graph,
     build_requirement_plan,
     derive_expected_figure,
@@ -20,10 +32,28 @@ from grounded_chart.evidence import (
     merge_expected_figure_specs,
 )
 from grounded_chart.intent_parser import HeuristicIntentParser, IntentParser, LLMIntentParser
-from grounded_chart.llm import LLMClient, OpenAICompatibleConfig, OpenAICompatibleLLMClient, extract_json_object
+from grounded_chart.llm import (
+    LLMClient,
+    LLMCompletionTrace,
+    LLMJsonResult,
+    LLMUsage,
+    OpenAICompatibleConfig,
+    OpenAICompatibleLLMClient,
+    extract_json_object,
+)
+from grounded_chart.patch_ops import PatchAnchor, PatchApplyResult, PatchOperation, apply_patch_operations, parse_patch_operations
 from grounded_chart.pipeline import GroundedChartPipeline
 from grounded_chart.repairer import LLMRepairer, Repairer, RuleBasedRepairer, TieredRepairer
-from grounded_chart.repair_policy import RepairPlan, RuleBasedRepairPlanner
+from grounded_chart.repair_policy import (
+    RepairActionClass,
+    RepairGateDecision,
+    RepairPlan,
+    RuleBasedRepairPlanner,
+    apply_auto_repair_gate,
+    normalize_repair_policy_mode,
+    repair_action_class_for_plan,
+    repair_action_class_for_scope,
+)
 from grounded_chart.requirements import (
     Artifact,
     ChartRequirementPlan,
@@ -52,8 +82,25 @@ from grounded_chart.schema import (
     VerificationError,
     VerificationReport,
 )
+from grounded_chart.code_structure import CodeStructureArtifact, extract_code_structure_artifacts
 from grounded_chart.trace_runner import ManualTraceRunner, MatplotlibTraceRunner
 from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.visual_artifacts import (
+    ActualVisualArtifact,
+    ExpectedVisualArtifact,
+    compile_expected_visual_artifacts,
+    extract_actual_visual_artifacts,
+    verify_expected_visual_artifacts,
+)
+from grounded_chart.codegen import (
+    ChartCodeGeneration,
+    ChartCodeGenerationRequest,
+    ChartCodeGenerator,
+    LLMChartCodeGenerator,
+    StaticChartCodeGenerator,
+)
+from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
+from grounded_chart.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
 
 __all__ = [
     "Artifact",
@@ -63,14 +110,32 @@ __all__ = [
     "AblationRunConfig",
     "BackendProfile",
     "attach_figure_requirements",
+    "bind_requirement_policy_to_verification",
     "build_evidence_graph",
     "build_requirement_plan",
     "CanonicalExecutor",
+    "ChartCodeGeneration",
+    "ChartCodeGenerationRequest",
+    "ChartCodeGenerator",
+    "ChartGenerationPipeline",
+    "ChartGenerationPipelineResult",
+    "ChartImageRenderer",
     "ChartIntentPlan",
+    "ChartRenderResult",
     "ChartRequirementPlan",
+    "CodeStructureArtifact",
     "DataPoint",
     "EvidenceGraph",
+    "compile_expected_artifacts_to_figure",
+    "extract_expected_trace_from_texts",
+    "extract_expected_trace_from_text",
+    "ExplicitPointExpectedTraceExtractor",
+    "ExpectedTraceExtraction",
+    "StructuredExpectedArtifacts",
+    "LLMExpectedArtifactExtractor",
+    "ExpectedArtifactNode",
     "EvidenceLink",
+    "FailureAtom",
     "FilterSpec",
     "FigureRequirementSpec",
     "FigureTrace",
@@ -82,8 +147,12 @@ __all__ = [
     "infer_requirement_id",
     "IntentParser",
     "LLMClient",
+    "LLMChartCodeGenerator",
+    "LLMCompletionTrace",
     "LLMIntentParser",
+    "LLMJsonResult",
     "LLMRepairer",
+    "LLMUsage",
     "load_ablation_run_config",
     "load_ablation_run_config_from_env",
     "MATPLOTLIB_2D_PROFILE",
@@ -95,12 +164,17 @@ __all__ = [
     "OpenAICompatibleConfig",
     "OpenAICompatibleLLMClient",
     "OperatorLevelVerifier",
+    "PatchAnchor",
+    "PatchApplyResult",
+    "PatchOperation",
     "PanelRequirementPlan",
     "ParsedRequirementBundle",
     "PipelineResult",
     "PlotTrace",
     "PLOTLY_PROFILE",
     "RepairAttempt",
+    "RepairActionClass",
+    "RepairGateDecision",
     "RepairPatch",
     "RepairPlan",
     "Repairer",
@@ -108,10 +182,25 @@ __all__ = [
     "RuleBasedRepairer",
     "RuleBasedRepairPlanner",
     "SortSpec",
+    "StaticChartCodeGenerator",
     "TableSchema",
     "TieredRepairer",
     "UNKNOWN_BACKEND_PROFILE",
     "VerificationError",
     "VerificationReport",
+    "verify_expected_visual_artifacts",
+    "extract_actual_visual_artifacts",
+    "extract_code_structure_artifacts",
+    "compile_expected_visual_artifacts",
+    "ExpectedVisualArtifact",
+    "ActualVisualArtifact",
+    "apply_auto_repair_gate",
+    "apply_patch_operations",
     "extract_json_object",
+    "failure_atoms_from_evidence_graph",
+    "failure_atoms_to_dicts",
+    "normalize_repair_policy_mode",
+    "parse_patch_operations",
+    "repair_action_class_for_plan",
+    "repair_action_class_for_scope",
 ]

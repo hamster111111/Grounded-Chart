@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
@@ -18,6 +18,16 @@ class LLMClient(Protocol):
     ) -> str:
         """Return raw model text."""
 
+    def complete_text_with_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> "LLMCompletionTrace":
+        """Return raw model text plus provider-side metadata when available."""
+
     def complete_json(
         self,
         *,
@@ -27,6 +37,43 @@ class LLMClient(Protocol):
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Return a parsed JSON object from model output."""
+
+    def complete_json_with_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> "LLMJsonResult":
+        """Return parsed JSON plus raw text/usage/provider trace when available."""
+
+
+@dataclass(frozen=True)
+class LLMUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LLMCompletionTrace:
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    raw_text: str = ""
+    parsed_json: dict[str, Any] | None = None
+    usage: LLMUsage | None = None
+    raw_response: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LLMJsonResult:
+    payload: dict[str, Any]
+    trace: LLMCompletionTrace | None = None
 
 
 @dataclass(frozen=True)
@@ -72,14 +119,30 @@ class OpenAICompatibleLLMClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> str:
+        return self.complete_text_with_trace(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ).raw_text
+
+    def complete_text_with_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> LLMCompletionTrace:
         client = self._ensure_client()
+        resolved_temperature = temperature if temperature is not None else self.config.temperature
         kwargs: dict[str, Any] = {
             "model": self.config.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": temperature if temperature is not None else self.config.temperature,
+            "temperature": resolved_temperature,
         }
         resolved_max_tokens = max_tokens if max_tokens is not None else self.config.max_tokens
         if resolved_max_tokens is not None:
@@ -88,8 +151,19 @@ class OpenAICompatibleLLMClient:
         message = response.choices[0].message
         content = getattr(message, "content", "")
         if isinstance(content, list):
-            return "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
-        return str(content or "")
+            raw_text = "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+        else:
+            raw_text = str(content or "")
+        return LLMCompletionTrace(
+            provider=_provider_label(self.config.base_url),
+            model=str(getattr(response, "model", None) or self.config.model),
+            base_url=self.config.base_url,
+            temperature=resolved_temperature,
+            max_tokens=resolved_max_tokens,
+            raw_text=raw_text,
+            usage=_usage_from_response(getattr(response, "usage", None)),
+            raw_response=_to_jsonable_payload(response),
+        )
 
     def complete_json(
         self,
@@ -99,13 +173,29 @@ class OpenAICompatibleLLMClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
-        text = self.complete_text(
+        return self.complete_json_with_trace(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ).payload
+
+    def complete_json_with_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> LLMJsonResult:
+        trace = self.complete_text_with_trace(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return extract_json_object(text)
+        payload = extract_json_object(trace.raw_text)
+        return LLMJsonResult(payload=payload, trace=replace(trace, parsed_json=payload))
 
     def _ensure_client(self):
         if self._client is None:
@@ -188,3 +278,77 @@ def _merge_no_proxy_values(upper: str | None, lower: str | None, host: str) -> s
     for entry in [item.strip() for item in str(lower or "").split(",") if item.strip()]:
         merged = _merge_no_proxy_value(merged, entry)
     return _merge_no_proxy_value(merged, host)
+
+
+def _provider_label(base_url: str | None) -> str:
+    if base_url:
+        parsed = urlparse(base_url)
+        if parsed.hostname:
+            return parsed.hostname.lower()
+    return "api.openai.com"
+
+
+def _usage_from_response(usage: object) -> LLMUsage | None:
+    if usage is None:
+        return None
+    prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
+    completion_tokens = _coerce_int(_get_field(usage, "completion_tokens"))
+    total_tokens = _coerce_int(_get_field(usage, "total_tokens"))
+    raw = _to_jsonable_payload(usage)
+    if prompt_tokens is None and completion_tokens is None and total_tokens is None and not raw:
+        return None
+    return LLMUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        raw=raw,
+    )
+
+
+def _get_field(value: object, name: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _coerce_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_jsonable_payload(value: object) -> dict[str, Any]:
+    normalized = _to_jsonable(value)
+    return normalized if isinstance(normalized, dict) else {"value": normalized}
+
+
+def _to_jsonable(value: object) -> Any:
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_jsonable(item) for item in value]
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _to_jsonable(model_dump(mode="json"))
+        except TypeError:
+            try:
+                return _to_jsonable(model_dump())
+            except Exception:
+                pass
+    as_dict = getattr(value, "dict", None)
+    if callable(as_dict):
+        try:
+            return _to_jsonable(as_dict())
+        except Exception:
+            pass
+    model_dump_json = getattr(value, "model_dump_json", None)
+    if callable(model_dump_json):
+        try:
+            return _to_jsonable(json.loads(model_dump_json()))
+        except Exception:
+            pass
+    return repr(value)

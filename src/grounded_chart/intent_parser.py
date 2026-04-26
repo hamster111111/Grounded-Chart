@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
@@ -350,7 +350,7 @@ def _intent_parser_system_prompt() -> str:
         "extract figure, layout, artist, axis, data-generation, color, style, legend, annotation, and projection requirements instead. "
         "The requirements array is the source of truth; top-level fields are only a compact executable summary. "
         "Return JSON with keys: chart_type, dimensions, measure_column, aggregation, filters, sort, limit, confidence, requirements. "
-        "Each requirements item must include scope, type, name, value, source_span, status, confidence, and optional assumption, depends_on, priority, panel_id. "
+        "Each requirements item must include scope, type, name, value, source_span, status, confidence, and optional assumption, depends_on, priority, panel_id, severity, match_policy. "
         "Use source_span only for text that appears verbatim in the user query. "
         "Allowed status values are explicit, inferred, assumed, ambiguous, unsupported. "
         "Mark ambiguous user language as ambiguous instead of silently choosing a ground-truth value. "
@@ -680,6 +680,8 @@ def _normalize_llm_requirement_node(
         priority=_normalize_priority(item.get("priority"), name),
         panel_id=panel_id,
         assumption=assumption_text,
+        severity=_normalize_requirement_severity(item.get("severity"), name),
+        match_policy=_normalize_requirement_match_policy(item.get("match_policy"), name),
     )
 
 
@@ -1338,6 +1340,30 @@ def _normalize_filter_extractions(value: object, schema: TableSchema) -> tuple[_
         )
     return tuple(filters)
 
+
+def _normalize_requirement_severity(value: object, name: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"error", "warning", "info"}:
+        return normalized
+    if name in {"figure_size", "size_inches", "bounds"}:
+        return "warning"
+    return "error"
+
+
+def _normalize_requirement_match_policy(value: object, name: str) -> str:
+    normalized = str(value or "").strip().lower()
+    allowed = {"exact", "contains", "normalized_contains", "numeric_close", "sequence_exact", "presence"}
+    if normalized in allowed:
+        return normalized
+    if name in {"figure_size", "size_inches", "bounds"}:
+        return "numeric_close"
+    if name in {"legend", "legend_labels", "annotation", "text_contains"}:
+        return "contains"
+    if name in {"artist_type", "artist_types", "min_artist_counts"}:
+        return "presence"
+    if name in {"xtick_labels", "ytick_labels", "ztick_labels"}:
+        return "sequence_exact"
+    return "exact"
 
 def _normalize_status(value: object, fallback: RequirementStatus) -> RequirementStatus:
     normalized = str(value or fallback).strip().lower()
