@@ -22,6 +22,8 @@ class AblationRunConfig:
     parser_provider: OpenAICompatibleConfig | None = None
     repair_provider: OpenAICompatibleConfig | None = None
     codegen_provider: OpenAICompatibleConfig | None = None
+    layout_provider: OpenAICompatibleConfig | None = None
+    plan_provider: OpenAICompatibleConfig | None = None
 
 
 def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
@@ -34,6 +36,8 @@ def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
     parser_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("parser", {})))
     repair_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("repair", {})))
     codegen_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("codegen", {})))
+    layout_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("layout", {})))
+    plan_provider = _merge_provider(default_provider, _provider_from_mapping(llm.get("plan", {})))
 
     parser_backend = _normalized_backend(run.get("parser_backend", "heuristic"), allowed={"heuristic", "llm"})
     repair_backend = _normalized_backend(run.get("repair_backend", "rule"), allowed={"rule", "llm", "tiered"})
@@ -63,6 +67,8 @@ def load_ablation_run_config(path: str | Path) -> AblationRunConfig:
         parser_provider=_resolve_provider_secret(parser_provider),
         repair_provider=_resolve_provider_secret(repair_provider),
         codegen_provider=_resolve_provider_secret(codegen_provider),
+        layout_provider=_resolve_provider_secret(layout_provider),
+        plan_provider=_resolve_provider_secret(plan_provider),
     )
 
 
@@ -81,6 +87,8 @@ def load_ablation_run_config_from_env() -> AblationRunConfig:
     parser_provider = _provider_from_env("GCHART_PARSER") if "GCHART_PARSER_MODEL" in os.environ else default_provider
     repair_provider = _provider_from_env("GCHART_REPAIR") if "GCHART_REPAIR_MODEL" in os.environ else default_provider
     codegen_provider = _provider_from_env("GCHART_CODEGEN") if "GCHART_CODEGEN_MODEL" in os.environ else default_provider
+    layout_provider = _provider_from_env("GCHART_LAYOUT") if "GCHART_LAYOUT_MODEL" in os.environ else default_provider
+    plan_provider = _provider_from_env("GCHART_PLAN") if "GCHART_PLAN_MODEL" in os.environ else default_provider
     return AblationRunConfig(
         bench_name=os.environ.get("GCHART_BENCH", "repair_loop_bench"),
         output_name=os.environ.get("GCHART_OUTPUT_NAME"),
@@ -93,6 +101,8 @@ def load_ablation_run_config_from_env() -> AblationRunConfig:
         parser_provider=parser_provider,
         repair_provider=repair_provider,
         codegen_provider=codegen_provider,
+        layout_provider=layout_provider,
+        plan_provider=plan_provider,
     )
 
 
@@ -133,9 +143,10 @@ def _merge_provider(
         return override
     if override is None:
         return base
+    same_endpoint = override.base_url is None or override.base_url == base.base_url
     return OpenAICompatibleConfig(
         model=override.model or base.model,
-        api_key=override.api_key or base.api_key,
+        api_key=override.api_key or (base.api_key if same_endpoint else ""),
         base_url=override.base_url or base.base_url,
         temperature=override.temperature,
         max_tokens=override.max_tokens if override.max_tokens is not None else base.max_tokens,

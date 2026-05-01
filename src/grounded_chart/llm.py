@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import base64
+import mimetypes
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
@@ -47,6 +50,17 @@ class LLMClient(Protocol):
         max_tokens: int | None = None,
     ) -> "LLMJsonResult":
         """Return parsed JSON plus raw text/usage/provider trace when available."""
+
+    def complete_json_with_image_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        image_path: str | Path,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> "LLMJsonResult":
+        """Return parsed JSON for a prompt that includes one local image."""
 
 
 @dataclass(frozen=True)
@@ -197,6 +211,76 @@ class OpenAICompatibleLLMClient:
         payload = extract_json_object(trace.raw_text)
         return LLMJsonResult(payload=payload, trace=replace(trace, parsed_json=payload))
 
+    def complete_json_with_image_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        image_path: str | Path,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> LLMJsonResult:
+        trace = self.complete_text_with_image_trace(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=image_path,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        payload = extract_json_object(trace.raw_text)
+        return LLMJsonResult(payload=payload, trace=replace(trace, parsed_json=payload))
+
+    def complete_text_with_image_trace(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        image_path: str | Path,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> LLMCompletionTrace:
+        client = self._ensure_client()
+        resolved_temperature = temperature if temperature is not None else self.config.temperature
+        resolved_max_tokens = max_tokens if max_tokens is not None else self.config.max_tokens
+        image_url = _image_data_url(image_path)
+        kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_prompt},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                },
+            ],
+            "temperature": resolved_temperature,
+        }
+        if resolved_max_tokens is not None:
+            kwargs["max_tokens"] = resolved_max_tokens
+        response = client.chat.completions.create(**kwargs)
+        message = response.choices[0].message
+        content = getattr(message, "content", "")
+        if isinstance(content, list):
+            raw_text = "".join(
+                str(item.get("text", ""))
+                for item in content
+                if isinstance(item, dict) and item.get("type") in {None, "text"}
+            )
+        else:
+            raw_text = str(content or "")
+        return LLMCompletionTrace(
+            provider=_provider_label(self.config.base_url),
+            model=str(getattr(response, "model", None) or self.config.model),
+            base_url=self.config.base_url,
+            temperature=resolved_temperature,
+            max_tokens=resolved_max_tokens,
+            raw_text=raw_text,
+            usage=_usage_from_response(getattr(response, "usage", None)),
+            raw_response=_to_jsonable_payload(response),
+        )
+
     def _ensure_client(self):
         if self._client is None:
             try:
@@ -251,6 +335,14 @@ def _strip_code_fence(text: str) -> str:
     if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
         return "\n".join(lines[1:-1]).strip()
     return text
+
+
+def _image_data_url(image_path: str | Path) -> str:
+    path = Path(image_path)
+    data = path.read_bytes()
+    mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 def _apply_no_proxy_for_base_url(base_url: str) -> None:

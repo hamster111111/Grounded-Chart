@@ -148,5 +148,89 @@ llm:
         self.assertEqual("https://api.codegen.test/v1", config.codegen_provider.base_url)
         self.assertEqual("sk-codegen", config.codegen_provider.api_key)
 
+    def test_yaml_config_can_override_layout_provider(self):
+        content = """
+run:
+  parser_backend: heuristic
+  repair_backend: rule
+
+llm:
+  default:
+    provider: openai_compatible
+    model: default-model
+    base_url: https://api.default.test/v1
+    api_key: sk-default
+  layout:
+    provider: openai_compatible
+    model: qwen-vl-layout
+    base_url: https://api.layout.test/v1
+    api_key: sk-layout
+    no_proxy: true
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.yaml"
+            path.write_text(content, encoding="utf-8")
+            config = load_ablation_run_config(path)
+
+        self.assertEqual("qwen-vl-layout", config.layout_provider.model)
+        self.assertEqual("https://api.layout.test/v1", config.layout_provider.base_url)
+        self.assertEqual("sk-layout", config.layout_provider.api_key)
+        self.assertTrue(config.layout_provider.no_proxy)
+
+    def test_yaml_config_can_override_plan_provider(self):
+        content = """
+run:
+  parser_backend: heuristic
+  repair_backend: rule
+
+llm:
+  default:
+    provider: openai_compatible
+    model: default-model
+    base_url: https://api.default.test/v1
+    api_key: sk-default
+  plan:
+    provider: openai_compatible
+    model: plan-model
+    base_url: https://api.plan.test/v1
+    api_key: sk-plan
+    no_proxy: true
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.yaml"
+            path.write_text(content, encoding="utf-8")
+            config = load_ablation_run_config(path)
+
+        self.assertEqual("plan-model", config.plan_provider.model)
+        self.assertEqual("https://api.plan.test/v1", config.plan_provider.base_url)
+        self.assertEqual("sk-plan", config.plan_provider.api_key)
+        self.assertTrue(config.plan_provider.no_proxy)
+
+    def test_provider_override_with_different_endpoint_does_not_inherit_default_key(self):
+        content = """
+run:
+  parser_backend: heuristic
+  repair_backend: rule
+
+llm:
+  default:
+    provider: openai_compatible
+    model: deepseek-chat
+    base_url: https://api.deepseek.com
+    api_key: sk-deepseek
+  layout:
+    provider: openai_compatible
+    model: qwen3.5-plus
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key: ""
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.yaml"
+            path.write_text(content, encoding="utf-8")
+            config = load_ablation_run_config(path)
+
+        self.assertEqual("qwen3.5-plus", config.layout_provider.model)
+        self.assertEqual("", config.layout_provider.api_key)
+
 if __name__ == "__main__":
     unittest.main()

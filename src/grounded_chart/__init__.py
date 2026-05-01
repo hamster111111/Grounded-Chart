@@ -43,6 +43,12 @@ from grounded_chart.llm import (
 )
 from grounded_chart.patch_ops import PatchAnchor, PatchApplyResult, PatchOperation, apply_patch_operations, parse_patch_operations
 from grounded_chart.pipeline import GroundedChartPipeline
+from grounded_chart.plan_feedback import (
+    normalize_figure_plan_feedback,
+    normalize_layout_plan_feedback,
+    normalize_plan_feedback_items,
+    plan_updates_from_feedback,
+)
 from grounded_chart.repairer import LLMRepairer, Repairer, RuleBasedRepairer, TieredRepairer
 from grounded_chart.repair_policy import (
     RepairActionClass,
@@ -101,6 +107,35 @@ from grounded_chart.codegen import (
 )
 from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
 from grounded_chart.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
+from grounded_chart.figure_reader import (
+    FigureAudit,
+    FigureReaderAgent,
+    VLMFigureReaderAgent,
+    figure_audit_plan_feedback,
+    normalized_figure_audit_notes,
+    write_figure_audit_artifact,
+)
+from grounded_chart.layout_critic import LayoutCriticAgent, LayoutCritique, LLMLayoutCriticAgent, VLMLayoutAgent
+from grounded_chart.plan_agent import ChartPlanAgent, HeuristicPlanAgent, LLMPlanAgent, PlanAgentRequest, PlanAgentResult
+from grounded_chart.plan_revision import LayoutOnlyPlanRevisionAgent, PlanRevisionAgent, PlanRevisionResult
+from grounded_chart.executor_agent import (
+    ExecutorFidelityIssue,
+    ExecutorFidelityReport,
+    ExecutorFidelityValidator,
+    validate_executor_fidelity,
+)
+from grounded_chart.construction_plan import (
+    ChartConstructionPlan,
+    HeuristicChartConstructionPlanner,
+    PlanDecision,
+    PlanValidationIssue,
+    PlanValidationReport,
+    PlanValidator,
+    VisualLayerPlan,
+    VisualPanelPlan,
+    validate_construction_plan,
+)
+from grounded_chart.source_data import SourceDataExecution, SourceDataExecutor, SourceDataPlan, SourceDataPlanner, SourceFileSummary
 
 __all__ = [
     "Artifact",
@@ -121,11 +156,19 @@ __all__ = [
     "ChartGenerationPipelineResult",
     "ChartImageRenderer",
     "ChartIntentPlan",
+    "ChartConstructionPlan",
     "ChartRenderResult",
     "ChartRequirementPlan",
+    "ChartPlanAgent",
+    "LayoutCriticAgent",
+    "LayoutCritique",
+    "LayoutOnlyPlanRevisionAgent",
     "CodeStructureArtifact",
     "DataPoint",
     "EvidenceGraph",
+    "ExecutorFidelityIssue",
+    "ExecutorFidelityReport",
+    "ExecutorFidelityValidator",
     "compile_expected_artifacts_to_figure",
     "extract_expected_trace_from_texts",
     "extract_expected_trace_from_text",
@@ -138,9 +181,13 @@ __all__ = [
     "FailureAtom",
     "FilterSpec",
     "FigureRequirementSpec",
+    "FigureAudit",
+    "FigureReaderAgent",
     "FigureTrace",
     "GroundedChartPipeline",
     "HeuristicIntentParser",
+    "HeuristicChartConstructionPlanner",
+    "HeuristicPlanAgent",
     "derive_expected_figure",
     "infer_backend_name",
     "infer_backend_profile",
@@ -149,6 +196,10 @@ __all__ = [
     "LLMClient",
     "LLMChartCodeGenerator",
     "LLMCompletionTrace",
+    "LLMLayoutCriticAgent",
+    "LLMPlanAgent",
+    "VLMLayoutAgent",
+    "VLMFigureReaderAgent",
     "LLMIntentParser",
     "LLMJsonResult",
     "LLMRepairer",
@@ -170,6 +221,14 @@ __all__ = [
     "PanelRequirementPlan",
     "ParsedRequirementBundle",
     "PipelineResult",
+    "PlanDecision",
+    "PlanAgentRequest",
+    "PlanAgentResult",
+    "PlanRevisionAgent",
+    "PlanRevisionResult",
+    "PlanValidationIssue",
+    "PlanValidationReport",
+    "PlanValidator",
     "PlotTrace",
     "PLOTLY_PROFILE",
     "RepairAttempt",
@@ -182,12 +241,21 @@ __all__ = [
     "RuleBasedRepairer",
     "RuleBasedRepairPlanner",
     "SortSpec",
+    "SourceDataExecution",
+    "SourceDataExecutor",
+    "SourceDataPlan",
+    "SourceDataPlanner",
+    "SourceFileSummary",
     "StaticChartCodeGenerator",
     "TableSchema",
     "TieredRepairer",
     "UNKNOWN_BACKEND_PROFILE",
     "VerificationError",
     "VerificationReport",
+    "validate_executor_fidelity",
+    "validate_construction_plan",
+    "VisualLayerPlan",
+    "VisualPanelPlan",
     "verify_expected_visual_artifacts",
     "extract_actual_visual_artifacts",
     "extract_code_structure_artifacts",
@@ -199,8 +267,15 @@ __all__ = [
     "extract_json_object",
     "failure_atoms_from_evidence_graph",
     "failure_atoms_to_dicts",
+    "figure_audit_plan_feedback",
     "normalize_repair_policy_mode",
+    "normalized_figure_audit_notes",
+    "normalize_figure_plan_feedback",
+    "normalize_layout_plan_feedback",
+    "normalize_plan_feedback_items",
     "parse_patch_operations",
+    "plan_updates_from_feedback",
     "repair_action_class_for_plan",
     "repair_action_class_for_scope",
+    "write_figure_audit_artifact",
 ]

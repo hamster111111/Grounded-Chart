@@ -1,7 +1,9 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 
-from grounded_chart.llm import _apply_no_proxy_for_base_url, _merge_no_proxy_value, _merge_no_proxy_values
+from grounded_chart.llm import OpenAICompatibleConfig, OpenAICompatibleLLMClient, _apply_no_proxy_for_base_url, _merge_no_proxy_value, _merge_no_proxy_values
 
 
 class NoProxyHelpersTest(unittest.TestCase):
@@ -33,6 +35,57 @@ class NoProxyHelpersTest(unittest.TestCase):
     def test_merge_no_proxy_values_combines_upper_and_lower(self):
         merged = _merge_no_proxy_values("localhost", "127.0.0.1", "api.deepseek.com")
         self.assertEqual("localhost,127.0.0.1,api.deepseek.com", merged)
+
+
+class ImageCompletionTest(unittest.TestCase):
+    def test_openai_compatible_client_sends_image_url_content(self):
+        class FakeCompletions:
+            def __init__(self):
+                self.kwargs = None
+
+            def create(self, **kwargs):
+                self.kwargs = kwargs
+
+                class Message:
+                    content = '{"ok": true}'
+
+                class Choice:
+                    message = Message()
+
+                class Response:
+                    choices = [Choice()]
+                    model = "fake-vlm"
+                    usage = None
+
+                return Response()
+
+        class FakeChat:
+            def __init__(self):
+                self.completions = FakeCompletions()
+
+        class FakeClient:
+            def __init__(self):
+                self.chat = FakeChat()
+
+        client = OpenAICompatibleLLMClient(OpenAICompatibleConfig(model="fake-vlm", api_key="sk-test"))
+        fake_client = FakeClient()
+        client._client = fake_client
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "figure.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+            result = client.complete_json_with_image_trace(
+                system_prompt="system",
+                user_prompt="user",
+                image_path=image_path,
+            )
+
+        messages = fake_client.chat.completions.kwargs["messages"]
+        content = messages[1]["content"]
+        self.assertTrue(result.payload["ok"])
+        self.assertEqual("text", content[0]["type"])
+        self.assertEqual("image_url", content[1]["type"])
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
 
 
 if __name__ == "__main__":
