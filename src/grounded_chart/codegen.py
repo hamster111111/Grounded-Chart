@@ -58,11 +58,11 @@ class StaticChartCodeGenerator:
 
 
 class LLMChartCodeGenerator:
-    """OpenAI-compatible LLM code generator for chart creation.
+    """OpenAI-compatible ExecutorAgent for chart creation.
 
-    The generated code is constrained to use the in-memory `rows` variable and
-    save a final artifact to `OUTPUT_PATH`. This keeps downstream tracing,
-    verification, repair, and rendering tied to the same data contract.
+    The generated code must faithfully execute the construction plan, data
+    contract, and output contract. It is not allowed to freely reinterpret the
+    figure structure after planning.
     """
 
     def __init__(
@@ -102,13 +102,32 @@ class LLMChartCodeGenerator:
 
 def _codegen_system_prompt() -> str:
     return (
-        "You generate executable Python chart code for a grounded chart pipeline. "
+        "You are ExecutorAgent for a grounded chart pipeline. "
+        "Your job is strict execution of the provided plan, not open-ended redesign. "
         "Return only a JSON object with keys: code, backend, instruction, notes, assumptions. "
         "When table rows are provided, the code must use the global variable `rows`, a list of dictionaries. "
+        "When source_data_plan is provided, the code must read the listed copied files by relative filename and must not fabricate substitute data. "
+        "When construction_plan is provided, follow its whole-figure layout, panel, layer, inset, legend, and title decisions. "
+        "If construction_plan provides semantic placement_policy/anchor/avoid_occlusion rather than numeric bounds, compute concrete layout coordinates yourself from figure size, axes, legends, titles, data density, and inset count. "
+        "Record those concrete layout decisions in a JSON file named computed_layout.json and a Markdown file named layout_decisions.md in the same directory as OUTPUT_PATH. "
+        "computed_layout.json should map plan refs such as panel.main or panel.pie_2008 to computed bounds/positions and short reasons. "
+        "When context.layout_replanning is provided, this is a PlanAgent replanning round: preserve source-grounded data and explicit requirements, but make concrete rendered changes required by layout_replanning.feedback_bundle. "
+        "Do not satisfy replanning feedback by changing only comments, metadata, or artifact round paths. "
+        "In layout_replanning mode, do not change source file reads, prepared artifact paths, deterministic data transformations, plotted values, source files, required labels, or required legend categories. "
+        "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared step_*.csv artifacts using each artifact's `relative_path` (for example execution/round_1/step_*.csv), not a bare step_*.csv filename. "
+        "Do not assume prepared artifacts are in the current directory; they are under the artifact_workspace execution_dir. "
+        "The final plot code must not recompute prepared plotted values from raw source CSVs. "
+        "When artifact_workspace contains chart_protocols, follow those chart-type protocols as binding rendering semantics. "
+        "Prepared artifacts listed in artifact_workspace are read-only for plotting code; do not overwrite step_*.csv files with to_csv/open/write. "
+        "For waterfall charts, if step_02_imports_waterfall_render_table.csv exists, use it as the bar geometry table with bottom=bar_bottom and height=bar_height; do not draw source values as ordinary zero-based bars. "
+        "The waterfall color_role values are exactly increase, decrease, and total; map those exact strings to distinct colors, not positive/negative. "
+        "For area charts, use semantic_modifiers and composition_policy from prepared artifacts. If composition_policy is overlap, draw independent translucent fill_between layers using *_fill_bottom and *_fill_top; do not stack by Urban + Rural. "
+        "For overlaid layers and twinx axes, use the same x-coordinate basis everywhere; do not plot bars at 0..N while plotting areas/lines at raw years. "
         "When generation_mode is instruction_only, `rows` may be empty; then use only constants, labels, and structures explicitly stated in the request. "
         "The code must save the final figure or interactive chart to the provided global variable `OUTPUT_PATH`. "
         "Prefer matplotlib unless the request explicitly needs Plotly or another backend. "
-        "Do not read external files, call network APIs, fabricate unstated data, or ignore the schema. "
+        "Do not call network APIs, fabricate unstated data, or ignore the schema/source-data constraints. "
+        "Do not drop planned panels, layers, insets, axes, legends, or titles unless the plan marks them as unsupported. "
         "For any arithmetic or aggregation over table rows, write Python code that computes from `rows`; do not hard-code derived values. "
         "Keep the code self-contained and deterministic."
     )
@@ -153,6 +172,23 @@ def _implementation_rules(generation_mode: str) -> list[str]:
     common = [
         "Write executable Python code, not pseudocode.",
         "Create all required labels, titles, legends, scales, annotations, and subplot structure when requested.",
+        "Treat context.construction_plan as the execution blueprint for figure layout, panels, visual layers, and inferred placement decisions.",
+        "Inferred construction_plan decisions may fill missing layout details, but must not contradict explicit requirements.",
+        "When layout coordinates are not hard-coded in the plan, compute them in code and save computed_layout.json plus layout_decisions.md next to OUTPUT_PATH.",
+        "The computed layout record should include each main panel/inset/global element, its computed coordinates or placement, the source plan refs used, and the reason for the decision.",
+        "Implement every explicit construction_plan layer; if a layer cannot be implemented, add a short assumption explaining why.",
+        "When multiple layers share an axis or use twinx, define one x variable and reuse it for bars, areas, lines, ticks, and inset anchor calculations.",
+        "If using index positions for years, map every data table onto those positions before plotting; if using raw years, use raw years for every overlaid layer.",
+        "If context.artifact_workspace lists execution artifacts, read the relevant step_*.csv files by their artifact relative_path for plotting instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
+        "If chart protocol files are listed in context.artifact_workspace, treat them as binding chart-type instructions. In particular, waterfall bars require a render table and explicit bar bottoms.",
+        "If context.layout_replanning exists, use context.layout_replanning.previous_code as the baseline, but implement the feedback_bundle through visible rendering changes.",
+        "In layout_replanning mode, preserve source-grounded data and deterministic artifacts, but revise layout, visual channels, legend/inset placement, rendering semantics, and readability details when needed to address PlanAgent feedback.",
+        "If a replanning candidate only changes comments, metadata, or artifact round paths, it has failed the replanning task.",
+        "For waterfall charts with step_02_imports_waterfall_render_table.csv, plot from x_position, bar_height, bar_bottom, bar_width, role, color_role, and series. Map color_role values increase/decrease/total exactly; do not test for positive/negative unless those strings are actually present in the artifact. Do not use step_02_imports_waterfall_values.csv as ordinary bar heights.",
+        "For area charts with step_03_consumption_area_values.csv, plot from Urban_fill_bottom/Urban_fill_top and Rural_fill_bottom/Rural_fill_top. Respect composition_policy; overlap means independent translucent areas, additive_stack means cumulative stacking.",
+        "If an explicit axis range is provided in the prepared area artifact columns axis_min/axis_max, apply it to the bound axis.",
+        "Do not overwrite framework-prepared step_*.csv artifacts. If a new intermediate table is needed, write a new filename and explain why in markdown.",
+        "Avoid calling tight_layout/constrained_layout after manually adding inset axes unless the code explicitly preserves all axes positions.",
         "Save exactly one final artifact to `OUTPUT_PATH` when possible.",
         "If using matplotlib, call `fig.savefig(OUTPUT_PATH, bbox_inches='tight')` or `plt.savefig(OUTPUT_PATH, bbox_inches='tight')`.",
         "If using Plotly and static export is unavailable, write HTML to `OUTPUT_PATH` with an .html suffix only if necessary.",
@@ -162,6 +198,15 @@ def _implementation_rules(generation_mode: str) -> list[str]:
             "This is an instruction-only plotting task: `rows` may be empty and schema may have no columns.",
             "Use only constants, labels, layout constraints, and visual structures explicitly stated in the query or context.",
             "Do not invent extra data series or semantic values that the request does not specify.",
+            *common,
+        ]
+    if generation_mode == "source_file_grounded":
+        return [
+            "This is a source-file-grounded plotting task.",
+            "Read each relevant file listed in context.source_data_plan by relative filename from the execution directory.",
+            "Use the exact file schemas and previews in context.source_data_plan/source_data_execution.",
+            "Do not create random, dummy, sample, placeholder, or synthetic replacement data for listed files.",
+            "If a table is wide, use its existing measure columns directly or explicitly melt it before long-form plotting.",
             *common,
         ]
     return [

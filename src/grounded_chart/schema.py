@@ -16,6 +16,7 @@ FilterOp = Literal["eq", "ne", "gt", "gte", "lt", "lte", "contains"]
 SortTarget = Literal["dimension", "measure"]
 SortDirection = Literal["asc", "desc"]
 RepairLoopAction = Literal["continue", "stop", "escalate"]
+PipelineStage = Literal["plan", "execution", "repair"]
 
 
 @dataclass(frozen=True)
