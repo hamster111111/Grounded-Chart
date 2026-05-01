@@ -13,6 +13,7 @@ The framework should make the following relation explicit and testable:
 ```text
 natural-language chart request
   -> intended chart requirements
+  -> chart construction plan
   -> expected requirement state
   -> actual plot trace
   -> requirement-level mismatch report
@@ -167,6 +168,7 @@ Every requirement should carry an evidence chain:
 ```text
 query span
   -> parsed requirement node
+  -> construction-plan decision
   -> deterministic expected artifact
   -> actual plot element / trace
   -> verifier verdict
@@ -214,6 +216,50 @@ For inferred requirements, the plan should record the assumption:
 ```
 
 This distinction is important. The framework should not silently convert ambiguous language into ground truth.
+
+### PlanAgent Output Contract
+
+The planning stage should not stop at requirement extraction. For executable chart generation, the planner should produce a **whole-figure construction plan**:
+
+- `source_data_plan`: required files, schema, preview rows, semantic role of each source.
+- `data_transform_plan`: deterministic operations such as wide-to-long reshape, diff, cumulative sums, filters, joins, ratios, and normalization.
+- `visual_structure_plan`: figure layout strategy, panels, layers, inset charts, shared axes, dual axes, legends, annotations, and title placement.
+- `execution_contract`: file-reading rules, output-path rule, backend preference, and constraints against random/sample data.
+- `assumptions`: layout or execution decisions that were not explicitly specified but are needed for a runnable figure.
+
+The planner may add inferred execution decisions, including semantic layout choices that are not explicitly stated, when they help the executor produce a coherent figure. These inferred decisions must be marked as `inferred` or `assumed`, carry a short rationale, and must not contradict explicit user requirements. If an inferred decision conflicts with an explicit requirement, the explicit requirement wins and the conflict should be recorded rather than silently overwritten.
+
+For example, when a request asks for a multi-layered time-series chart with embedded pie charts but does not specify exact coordinates, the PlanAgent may infer a `main_axes_with_top_insets` or `overlayed_insets_with_occlusion_avoidance` layout intent so the executor can reserve space for the main chart, inset pies, legends, and title. This is an execution decision, not a new source-grounded requirement.
+
+The PlanAgent should not normally author exact normalized bounds unless the user explicitly specifies exact placement or a hard constraint makes a coordinate unavoidable. It should instead express:
+
+- relative placement intent
+- anchoring relationships
+- reserved regions
+- occlusion-avoidance requirements
+- visual hierarchy and grouping
+- layout rationale and assumptions
+
+The ExecutorAgent computes concrete plotting coordinates from these semantic layout contracts because it has access to the actual plotting backend, figure size, axes construction, legends, titles, and rendered elements.
+
+### ExecutorAgent Fidelity Contract
+
+The ExecutorAgent is not another free-form chart generator. It should strictly implement the construction plan:
+
+- read every required source file from `source_data_plan`
+- implement every explicit panel and visual layer from `visual_structure_plan`
+- preserve planned titles, legends, axes, insets, and output contract
+- compute deterministic data transformations in code rather than inventing values
+- avoid random, sample, dummy, or synthetic data when source files are available
+
+If the executor cannot implement part of the plan, it should surface an explicit unsupported/assumption note. It should not silently redesign the figure. Structural disagreements belong to plan repair or visual-structure repair, not arbitrary executor improvisation.
+
+When the construction plan delegates concrete layout to execution through `placement_policy`, `anchor`, `avoid_occlusion`, or similar semantic contracts, the ExecutorAgent should record the resulting layout choices next to the generated figure:
+
+- `computed_layout.json`: concrete panel, inset, legend, and title placements with source plan references.
+- `layout_decisions.md`: short natural-language reasons explaining why those placements were chosen.
+
+These files are execution evidence, not a separate deterministic layout compiler. They make layout fidelity inspectable without forcing PlanAgent to produce brittle coordinate-level patches.
 
 ### Deterministic Computation Principle
 
@@ -913,6 +959,7 @@ Use when:
 - generated code is unrelated to the query
 - code execution succeeds but the plot trace is semantically far from the requirement plan
 - local patch would be more fragile than regeneration
+- visual evidence shows global layout, composition, occlusion, or chart-structure failures that trace-only checks cannot localize
 
 Examples:
 
@@ -920,12 +967,15 @@ Examples:
 - generated chart answers a different query
 - multi-panel structure is inconsistent with a single-chart request
 - data flow is too tangled to patch safely
+- figure composition is visually unusable despite executable code
 
 Action:
 
 - allow regeneration of the chart code
 - constrain regeneration with the requirement plan and deterministic expected artifacts
+- use VLM feedback as a visual critique signal when layout or composition cannot be judged from traces alone
 - prohibit invented requirements
+- prohibit invented data when source files, schema, or expected artifacts are available
 - require post-regeneration tracing and verification
 
 Example repair instruction:
@@ -935,6 +985,84 @@ Regenerate the chart code from the requirement plan and expected artifact.
 Use the provided computed table as the only source of plotted values.
 Do not invent additional requirements.
 ```
+
+### VLM-Guided Visual Feedback
+
+Visual feedback is useful, but it must be treated as **evidence input**, not as the final correctness authority.
+
+MatPlotAgent-style visual refinement is a useful inspiration because it can detect failures that code traces often miss:
+
+- cramped or overlapping labels
+- unusable legends
+- missing visible panels
+- incorrectly placed inset charts
+- visually broken multi-layer composition
+- chart-type mismatch that is obvious in the rendered image
+- cases where executable code produces a semantically incoherent figure
+
+However, unconstrained visual feedback has a serious risk: it can improve visual resemblance while still hallucinating data or silently changing requirements. Therefore, GroundedChart should use VLMs under evidence constraints.
+
+Recommended VLM role:
+
+```text
+rendered image + instruction + requirement plan + actual trace summary
+  -> VLM visual critique
+  -> visual evidence artifact
+  -> RepairPlanner scope decision
+  -> local patch or structural regeneration
+```
+
+The VLM should output structured feedback, not free-form advice:
+
+```json
+{
+  "visual_mismatches": [
+    {
+      "requirement_id": "req-13",
+      "family": "composition",
+      "problem": "Pie charts are not aligned with the requested years.",
+      "visual_evidence": "All pie charts are floating above the plot area.",
+      "repair_hint": "Place inset axes near x positions for 2002, 2008, and 2016.",
+      "severity": "major",
+      "confidence": 0.78
+    }
+  ],
+  "layout_risks": ["x-axis labels overlap heavily"],
+  "suggested_repair_level": 3,
+  "do_not_change": ["data source", "explicit units", "required chart families"]
+}
+```
+
+The VLM should be allowed to influence:
+
+- whether local patching is insufficient
+- whether structural regeneration is justified
+- which visible requirement family appears broken
+- layout and composition repair hints
+- post-repair visual sanity checks
+
+The VLM should not be allowed to decide:
+
+- computed data values
+- aggregation correctness
+- filtering correctness
+- whether invented data is acceptable
+- final benchmark correctness without deterministic or benchmark-level evidence
+
+For data-backed multi-layer chart failures, the correct flow should be:
+
+```text
+available CSV files + schema preview
+  -> deterministic data/source evidence
+  -> requirement plan
+  -> rendered image + trace
+  -> VLM critique for visible composition failures
+  -> RepairPlanner chooses structural regeneration
+  -> regenerated code must read the provided CSV files
+  -> post-repair deterministic + visual checks
+```
+
+This keeps the benefit of visual feedback while avoiding a generic "look at the image and rewrite" agent story.
 
 #### Level 4: Abstain / Ask Clarification
 
@@ -1704,10 +1832,11 @@ These are useful, but they should not be allowed to distract from the core evide
 - useful after oracle/predicted separation is in place
 - not the current bottleneck for defining the framework
 
-2. **Tiered LLM repair**
+2. **Tiered LLM / VLM-assisted repair**
 
 - useful later for structural and semantic failures
 - should come after the deterministic and reporting boundary is clean
+- VLM feedback should be used as bounded visual evidence, not as an unconstrained judge
 
 3. **Richer multi-panel / shared-requirement support**
 
@@ -1717,7 +1846,7 @@ These are useful, but they should not be allowed to distract from the core evide
 4. **More sophisticated structural regeneration**
 
 - likely needed for hard layout / subplot-role failures
-- but this should come after the framework can clearly explain why local repair stops being appropriate
+- can use VLM critique to justify why local repair stops being appropriate
 
 ### Deprioritize For Now
 
@@ -1737,8 +1866,9 @@ If development is guided by the current framework goal, the recommended order is
 3. intermediate deterministic artifacts
 4. requirement-level metrics and failure taxonomy
 5. oracle vs predicted evaluation split
-6. second benchmark / diagnostic evidence
-7. only then revisit stronger LLM repair or structural regeneration
+6. VLM visual-critique artifact for hard composition failures
+7. tiered repair planner with local patch vs data patch vs structural regeneration
+8. second benchmark / diagnostic evidence
 
 ## 9. Non-Goals
 
@@ -1748,7 +1878,7 @@ For the first serious prototype, do not focus on:
 - scientific illustration
 - image-to-code chart mimicking
 - open-ended multi-agent planning
-- screenshot-only visual judging
+- screenshot-only visual judging as the core correctness metric
 - arbitrary Python program verification
 - subjective aesthetics not grounded in explicit user requirements
 - LLM-generated numerical ground truth for core verification
