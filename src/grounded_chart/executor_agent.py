@@ -67,6 +67,7 @@ class ExecutorFidelityValidator:
             issues.extend(_validate_artifact_workspace_contract(code_text, artifact_workspace))
             issues.extend(_validate_chart_protocol_contract(code_text, artifact_workspace))
             issues.extend(_validate_area_modifier_contract(code_text, artifact_workspace))
+            issues.extend(_validate_visual_channel_decision_record_contract(code_text, artifact_workspace))
         checked.append("output_contract")
         if "OUTPUT_PATH" not in code_text:
             issues.append(
@@ -270,8 +271,10 @@ def _requires_executor_computed_layout(construction_plan: dict[str, Any]) -> boo
 
 def _validate_artifact_workspace_contract(code: str, artifact_workspace: dict[str, Any]) -> list[ExecutorFidelityIssue]:
     issues: list[ExecutorFidelityIssue] = []
-    prepared_csvs = sorted(_prepared_artifact_names(artifact_workspace))
-    for name in prepared_csvs:
+    plotting_artifacts = _prepared_plotting_artifacts(artifact_workspace)
+    prepared_csvs = {str(item.get("name") or "") for item in plotting_artifacts}
+    for artifact in plotting_artifacts:
+        name = str(artifact.get("name") or "")
         escaped = re.escape(name)
         writes_artifact = bool(
             re.search(rf"\.to_csv\s*\(\s*['\"][^'\"]*{escaped}['\"]", code)
@@ -286,16 +289,9 @@ def _validate_artifact_workspace_contract(code: str, artifact_workspace: dict[st
                     plan_ref=f"artifact_workspace.artifacts.{name}",
                 )
             )
-    expected_inputs = [
-        "step_03_consumption_area_values.csv",
-        "step_04_pie_values.csv",
-    ]
-    if "step_02_imports_waterfall_render_table.csv" in prepared_csvs:
-        expected_inputs.append("step_02_imports_waterfall_render_table.csv")
-    elif "step_02_imports_waterfall_values.csv" in prepared_csvs:
-        expected_inputs.append("step_02_imports_waterfall_values.csv")
-    for name in expected_inputs:
-        if name in prepared_csvs and name not in code:
+    for artifact in plotting_artifacts:
+        name = str(artifact.get("name") or "")
+        if not _artifact_or_alias_is_read(code, artifact_workspace, artifact):
             issues.append(
                 ExecutorFidelityIssue(
                     code="prepared_artifact_not_read",
@@ -304,7 +300,7 @@ def _validate_artifact_workspace_contract(code: str, artifact_workspace: dict[st
                     plan_ref=f"artifact_workspace.artifacts.{name}",
                 )
             )
-        elif name in prepared_csvs and not _uses_artifact_relative_path(code, artifact_workspace, name):
+        elif not _uses_artifact_or_alias_relative_path(code, artifact_workspace, artifact):
             issues.append(
                 ExecutorFidelityIssue(
                     code="prepared_artifact_bare_filename_read",
@@ -318,45 +314,52 @@ def _validate_artifact_workspace_contract(code: str, artifact_workspace: dict[st
 
 def _validate_chart_protocol_contract(code: str, artifact_workspace: dict[str, Any]) -> list[ExecutorFidelityIssue]:
     issues: list[ExecutorFidelityIssue] = []
-    prepared_csvs = _prepared_artifact_names(artifact_workspace)
     protocols = _chart_protocols(artifact_workspace)
+    waterfall_artifacts = _artifacts_by_role(artifact_workspace, "waterfall_geometry")
     has_waterfall_protocol = "waterfall" in protocols or any("waterfall_protocol" in name for name in _artifact_names(artifact_workspace))
-    has_waterfall_render_table = "step_02_imports_waterfall_render_table.csv" in prepared_csvs
-    if not (has_waterfall_protocol or has_waterfall_render_table):
+    if not (has_waterfall_protocol or waterfall_artifacts):
         return issues
-    if has_waterfall_render_table and "step_02_imports_waterfall_render_table.csv" not in code:
-        issues.append(
-            ExecutorFidelityIssue(
-                code="waterfall_render_table_not_read",
-                message="Waterfall protocol requires reading step_02_imports_waterfall_render_table.csv.",
-                plan_ref="artifact_workspace.chart_protocols.waterfall",
+    for artifact in waterfall_artifacts:
+        name = str(artifact.get("name") or "")
+        if name and not _artifact_or_alias_is_read(code, artifact_workspace, artifact):
+            issues.append(
+                ExecutorFidelityIssue(
+                    code="waterfall_render_table_not_read",
+                    message=f"Waterfall protocol requires reading prepared geometry artifact `{name}`.",
+                    plan_ref=f"artifact_workspace.artifacts.{name}",
+                )
             )
-        )
-    if has_waterfall_render_table and not _uses_waterfall_bottom_height(code):
+    if waterfall_artifacts and not _uses_waterfall_bottom_height(code):
         issues.append(
             ExecutorFidelityIssue(
                 code="waterfall_render_protocol_not_used",
-                message="Waterfall protocol requires plotting bars with bottom=bar_bottom and height=bar_height from the render table.",
+                message="Waterfall protocol requires plotting bars with bottom=bar_bottom and height=bar_height from the prepared geometry artifact.",
                 plan_ref="artifact_workspace.chart_protocols.waterfall",
             )
         )
-    if has_waterfall_render_table and _uses_values_table_as_zero_based_waterfall(code):
+    source_artifact_names = [
+        str(item.get("name") or "")
+        for item in _artifacts_by_role(artifact_workspace, "source_values")
+        if str(item.get("chart_type") or "").lower() in {"", "waterfall"}
+    ]
+    if waterfall_artifacts and _uses_values_table_as_zero_based_waterfall(code, source_artifact_names=source_artifact_names):
         issues.append(
             ExecutorFidelityIssue(
                 code="waterfall_values_table_used_as_ordinary_bars",
                 message="Executor appears to draw waterfall source values as ordinary zero-based bars instead of using protocol geometry.",
-                plan_ref="artifact_workspace.artifacts.step_02_imports_waterfall_render_table.csv",
+                plan_ref="artifact_workspace.artifacts.waterfall_geometry",
             )
         )
-    if has_waterfall_render_table and _uses_non_protocol_waterfall_color_roles(code):
+    if waterfall_artifacts and _uses_legacy_waterfall_change_color_mapping(code):
         issues.append(
             ExecutorFidelityIssue(
-                code="waterfall_color_role_enum_mismatch",
+                code="waterfall_visual_channel_policy_bypass",
                 message=(
-                    "Waterfall render table uses color_role values increase/decrease/total, "
-                    "but executor code appears to branch on positive/negative."
+                    "Executor appears to hard-code waterfall change-direction colors while the protocol/artifact "
+                    "may assign fill color to a different field such as fill_color_role or series."
                 ),
-                plan_ref="artifact_workspace.chart_protocols.waterfall.color_role",
+                plan_ref="artifact_workspace.chart_protocols.waterfall.visual_channel_policy",
+                severity="warning",
             )
         )
     return issues
@@ -364,13 +367,14 @@ def _validate_chart_protocol_contract(code: str, artifact_workspace: dict[str, A
 
 def _validate_area_modifier_contract(code: str, artifact_workspace: dict[str, Any]) -> list[ExecutorFidelityIssue]:
     issues: list[ExecutorFidelityIssue] = []
-    prepared_csvs = _prepared_artifact_names(artifact_workspace)
-    if "step_03_consumption_area_values.csv" not in prepared_csvs:
+    area_artifacts = _artifacts_by_role(artifact_workspace, "area_fill_geometry")
+    if not area_artifacts:
         return issues
     has_area_protocol = "area" in _chart_protocols(artifact_workspace) or any("area_protocol" in name for name in _artifact_names(artifact_workspace))
     if not has_area_protocol:
         return issues
-    if "step_03_consumption_area_values.csv" in code and not _uses_area_fill_columns(code):
+    mentioned_area_artifact = any(_artifact_or_alias_is_read(code, artifact_workspace, item) for item in area_artifacts)
+    if mentioned_area_artifact and not _uses_area_fill_columns(code, area_artifacts=area_artifacts):
         issues.append(
             ExecutorFidelityIssue(
                 code="area_fill_geometry_not_used",
@@ -382,12 +386,49 @@ def _validate_area_modifier_contract(code: str, artifact_workspace: dict[str, An
         issues.append(
             ExecutorFidelityIssue(
                 code="area_additive_stack_without_policy_check",
-                message="Executor appears to use Urban + Rural stacking without checking composition_policy from the prepared artifact.",
-                plan_ref="artifact_workspace.artifacts.step_03_consumption_area_values.csv",
+                message="Executor appears to use hard-coded additive stacking without checking composition_policy from the prepared artifact.",
+                plan_ref="artifact_workspace.artifacts.area_fill_geometry",
                 severity="warning",
             )
         )
     return issues
+
+
+def _validate_visual_channel_decision_record_contract(code: str, artifact_workspace: dict[str, Any]) -> list[ExecutorFidelityIssue]:
+    hard_contracts = _hard_visual_channel_contracts(artifact_workspace)
+    if not hard_contracts:
+        return []
+    if "visual_channel_decisions.json" in code:
+        return []
+    channels = {str(item.get("channel") or "") for item in hard_contracts}
+    channel_tokens = {
+        "fill_color": ("color=", "c=", "facecolor=", "fill_color", "palette"),
+        "line_color": ("color=", "line_color", "palette"),
+        "marker_shape": ("marker=", "marker_shape"),
+        "hatch": ("hatch=",),
+        "edge_style": ("edgecolor=", "linestyle=", "edge_style"),
+        "alpha": ("alpha=",),
+        "x_offset": ("x_offset", "x_position", "+ row", "+ offset"),
+    }
+    lower = str(code or "").lower()
+    likely_implements_contract = any(
+        any(token.lower() in lower for token in channel_tokens.get(channel, (channel,)))
+        for channel in channels
+        if channel
+    )
+    if not likely_implements_contract:
+        return []
+    return [
+        ExecutorFidelityIssue(
+            code="missing_visual_channel_decisions_record",
+            message=(
+                "Hard visual-channel contracts are present, but executor code does not record "
+                "its actual semantic channel mappings in visual_channel_decisions.json."
+            ),
+            severity="warning",
+            plan_ref="artifact_workspace.chart_protocols.visual_channel_contracts",
+        )
+    ]
 
 
 def _prepared_artifact_names(artifact_workspace: dict[str, Any]) -> set[str]:
@@ -396,7 +437,76 @@ def _prepared_artifact_names(artifact_workspace: dict[str, Any]) -> set[str]:
         for item in list(artifact_workspace.get("artifacts") or [])
         if isinstance(item, dict)
     }
-    return {name for name in artifact_names if name.startswith("step_") and name.endswith(".csv")}
+    return {name for name in artifact_names if name.endswith(".csv")}
+
+
+def _prepared_plotting_artifacts(artifact_workspace: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts = []
+    for item in list(artifact_workspace.get("artifacts") or []):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if not name.endswith(".csv"):
+            continue
+        if item.get("required_for_plotting") is False:
+            continue
+        if item.get("legacy_alias"):
+            continue
+        if not _is_hard_fidelity_contract(item):
+            continue
+        if not item.get("artifact_role") and not name.startswith("step_"):
+            continue
+        artifacts.append(item)
+    return artifacts
+
+
+def _artifacts_by_role(artifact_workspace: dict[str, Any], role: str) -> list[dict[str, Any]]:
+    result = []
+    for item in list(artifact_workspace.get("artifacts") or []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("legacy_alias"):
+            continue
+        if not _is_hard_fidelity_contract(item):
+            continue
+        if str(item.get("artifact_role") or "") == role:
+            result.append(item)
+            continue
+        name = str(item.get("name") or "").lower()
+        if role == "waterfall_geometry" and ("waterfall_geometry" in name or "waterfall_render_table" in name):
+            result.append(item)
+        elif role == "area_fill_geometry" and ("area_fill_geometry" in name or "area_values" in name):
+            result.append(item)
+        elif role == "source_values" and ("source_values" in name or "waterfall_values" in name):
+            result.append(item)
+    return result
+
+
+def _artifact_or_alias_is_read(code: str, artifact_workspace: dict[str, Any], artifact: dict[str, Any]) -> bool:
+    for name in _artifact_and_alias_names(artifact_workspace, artifact):
+        if name and name in code:
+            return True
+    return False
+
+
+def _uses_artifact_or_alias_relative_path(code: str, artifact_workspace: dict[str, Any], artifact: dict[str, Any]) -> bool:
+    for name in _artifact_and_alias_names(artifact_workspace, artifact):
+        if name and name in code and _uses_artifact_relative_path(code, artifact_workspace, name):
+            return True
+    return False
+
+
+def _artifact_and_alias_names(artifact_workspace: dict[str, Any], artifact: dict[str, Any]) -> list[str]:
+    name = str(artifact.get("name") or "")
+    names = [name] if name else []
+    for item in list(artifact_workspace.get("artifacts") or []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("alias_for") or "") == name:
+            alias = str(item.get("name") or "")
+            if alias and alias not in names:
+                names.append(alias)
+    return names
 
 
 def _uses_artifact_relative_path(code: str, artifact_workspace: dict[str, Any], name: str) -> bool:
@@ -475,6 +585,25 @@ def _chart_protocols(artifact_workspace: dict[str, Any]) -> set[str]:
     return {item for item in protocols if item}
 
 
+def _hard_visual_channel_contracts(artifact_workspace: dict[str, Any]) -> list[dict[str, Any]]:
+    metadata = _dict(artifact_workspace.get("metadata"))
+    contracts: list[dict[str, Any]] = []
+    for protocol in list(metadata.get("chart_protocols") or []):
+        if not isinstance(protocol, dict):
+            continue
+        for contract in list(protocol.get("visual_channel_contracts") or []):
+            if isinstance(contract, dict) and _is_hard_fidelity_contract(contract):
+                contracts.append(contract)
+    return contracts
+
+
+def _is_hard_fidelity_contract(item: dict[str, Any]) -> bool:
+    tier = str(item.get("contract_tier") or item.get("tier") or "").strip().lower()
+    if tier:
+        return tier in {"hard_fidelity", "hard", "fidelity", "required"}
+    return str(item.get("strength") or "hard").strip().lower() == "hard"
+
+
 def _uses_waterfall_bottom_height(code: str) -> bool:
     lower = code.lower()
     has_bottom_arg = bool(re.search(r"\bbar\s*\([^)]*\bbottom\s*=", code, re.DOTALL))
@@ -483,26 +612,38 @@ def _uses_waterfall_bottom_height(code: str) -> bool:
     return has_bottom_arg and mentions_bottom_col and mentions_height_col
 
 
-def _uses_values_table_as_zero_based_waterfall(code: str) -> bool:
-    if "step_02_imports_waterfall_values.csv" not in code:
+def _uses_values_table_as_zero_based_waterfall(code: str, *, source_artifact_names: list[str]) -> bool:
+    if not any(name and name in code for name in source_artifact_names):
         return False
-    if "step_02_imports_waterfall_render_table.csv" in code and _uses_waterfall_bottom_height(code):
+    if _uses_waterfall_bottom_height(code):
         return False
     return bool(re.search(r"\bbar\s*\(", code))
 
 
-def _uses_non_protocol_waterfall_color_roles(code: str) -> bool:
+def _uses_legacy_waterfall_change_color_mapping(code: str) -> bool:
     lower = str(code or "").lower()
-    if "color_role" not in lower:
+    if "fill_color_role" in lower or "series_color_role" in lower:
         return False
-    if "positive" not in lower and "negative" not in lower:
+    if "change_role" not in lower and "color_role" not in lower:
         return False
-    return not ("increase" in lower and "decrease" in lower)
+    legacy_terms = ("increase", "decrease", "total", "positive", "negative")
+    return sum(1 for term in legacy_terms if term in lower) >= 2
 
 
-def _uses_area_fill_columns(code: str) -> bool:
+def _uses_area_fill_columns(code: str, *, area_artifacts: list[dict[str, Any]]) -> bool:
     lower = code.lower()
-    return all(name.lower() in lower for name in ("Urban_fill_bottom", "Urban_fill_top", "Rural_fill_bottom", "Rural_fill_top"))
+    schema_columns: list[str] = []
+    for artifact in area_artifacts:
+        schema = artifact.get("schema") if isinstance(artifact.get("schema"), dict) else {}
+        for column in list(schema.get("columns") or artifact.get("columns") or []):
+            value = str(column)
+            if value and value not in schema_columns:
+                schema_columns.append(value)
+    bottom_cols = [column for column in schema_columns if column.lower().endswith("_fill_bottom")]
+    top_cols = [column for column in schema_columns if column.lower().endswith("_fill_top")]
+    if bottom_cols and top_cols:
+        return any(column.lower() in lower for column in bottom_cols) and any(column.lower() in lower for column in top_cols)
+    return "_fill_bottom" in lower and "_fill_top" in lower
 
 
 def _uses_additive_area_without_policy(code: str) -> bool:

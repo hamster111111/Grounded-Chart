@@ -114,14 +114,18 @@ def _codegen_system_prompt() -> str:
         "When context.layout_replanning is provided, this is a PlanAgent replanning round: preserve source-grounded data and explicit requirements, but make concrete rendered changes required by layout_replanning.feedback_bundle. "
         "Do not satisfy replanning feedback by changing only comments, metadata, or artifact round paths. "
         "In layout_replanning mode, do not change source file reads, prepared artifact paths, deterministic data transformations, plotted values, source files, required labels, or required legend categories. "
-        "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared step_*.csv artifacts using each artifact's `relative_path` (for example execution/round_1/step_*.csv), not a bare step_*.csv filename. "
+        "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared plotting CSV artifacts using each artifact's `relative_path` (for example execution/round_1/artifact_*.csv), not a bare filename. "
         "Do not assume prepared artifacts are in the current directory; they are under the artifact_workspace execution_dir. "
         "The final plot code must not recompute prepared plotted values from raw source CSVs. "
-        "When artifact_workspace contains chart_protocols, follow those chart-type protocols as binding rendering semantics. "
-        "Prepared artifacts listed in artifact_workspace are read-only for plotting code; do not overwrite step_*.csv files with to_csv/open/write. "
-        "For waterfall charts, if step_02_imports_waterfall_render_table.csv exists, use it as the bar geometry table with bottom=bar_bottom and height=bar_height; do not draw source values as ordinary zero-based bars. "
-        "The waterfall color_role values are exactly increase, decrease, and total; map those exact strings to distinct colors, not positive/negative. "
-        "For area charts, use semantic_modifiers and composition_policy from prepared artifacts. If composition_policy is overlap, draw independent translucent fill_between layers using *_fill_bottom and *_fill_top; do not stack by Urban + Rural. "
+        "Artifact metadata is tiered: hard_fidelity artifacts are binding data/geometry inputs; soft_guidance artifacts are advisory; free_design artifacts are optional compatibility/design-space material. Choose artifacts by artifact_role, chart_type, layer_id, contract_tier, and schema.columns; do not rely on fixed benchmark filenames or guessed column names. "
+        "Artifact schemas are binding: use only columns listed in context.artifact_workspace.artifacts[].schema.columns/columns unless your code explicitly creates a documented derived intermediate table. "
+        "When artifact_workspace contains chart_protocols, follow hard_fidelity protocol commitments as binding rendering semantics; use soft_guidance for readability, and treat free_design as Executor-owned choices. "
+        "When chart_protocols include visual_channel_contracts, treat hard contracts as semantic bindings only: preserve which field controls a channel, but choose palette/line style/spacing yourself unless explicitly specified. "
+        "Record actual hard visual-channel choices in visual_channel_decisions.json next to OUTPUT_PATH when you implement fill_color, line_color, marker_shape, hatch, edge_style, alpha, or x_offset from a contract. "
+        "Prepared artifacts listed in artifact_workspace are read-only for plotting code; do not overwrite framework-prepared CSV files with to_csv/open/write. "
+        "For waterfall charts, if an artifact has artifact_role=waterfall_geometry, use it as the bar geometry table with bottom=bar_bottom and height=bar_height; do not draw source_values artifacts as ordinary zero-based bars. "
+        "For waterfall charts, do not assume terminal/total geometry roles must use a distinct fill color; follow chart_protocols.visual_channel_policy and artifact fields such as fill_color_role, series_color_role, series, and change_role. "
+        "For area charts, use semantic_modifiers and composition_policy from prepared artifacts. If composition_policy is overlap, draw independent translucent fill_between layers using the artifact's per-series *_fill_bottom and *_fill_top columns; do not silently stack series by addition. "
         "For overlaid layers and twinx axes, use the same x-coordinate basis everywhere; do not plot bars at 0..N while plotting areas/lines at raw years. "
         "When generation_mode is instruction_only, `rows` may be empty; then use only constants, labels, and structures explicitly stated in the request. "
         "The code must save the final figure or interactive chart to the provided global variable `OUTPUT_PATH`. "
@@ -179,15 +183,19 @@ def _implementation_rules(generation_mode: str) -> list[str]:
         "Implement every explicit construction_plan layer; if a layer cannot be implemented, add a short assumption explaining why.",
         "When multiple layers share an axis or use twinx, define one x variable and reuse it for bars, areas, lines, ticks, and inset anchor calculations.",
         "If using index positions for years, map every data table onto those positions before plotting; if using raw years, use raw years for every overlaid layer.",
-        "If context.artifact_workspace lists execution artifacts, read the relevant step_*.csv files by their artifact relative_path for plotting instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
-        "If chart protocol files are listed in context.artifact_workspace, treat them as binding chart-type instructions. In particular, waterfall bars require a render table and explicit bar bottoms.",
+        "If context.artifact_workspace lists execution artifacts, read the relevant required_for_plotting CSV files by their artifact relative_path for plotting instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
+        "Only hard_fidelity artifacts and explicit source requirements are blocking contracts. Soft_guidance should improve readability; free_design is delegated to your judgment.",
+        "Before using a prepared CSV column, check context.artifact_workspace artifact schemas. Do not assume long-form columns such as series/value exist when the artifact schema is wide.",
+        "If chart protocol files are listed in context.artifact_workspace, treat hard_fidelity items as binding chart-type instructions. In particular, hard_fidelity waterfall geometry requires a render table and explicit bar bottoms.",
+        "If chart protocols expose visual_channel_contracts, do not turn them into fixed aesthetics. Use hard contracts only to bind channels to semantic fields, then record your actual mapping in visual_channel_decisions.json.",
         "If context.layout_replanning exists, use context.layout_replanning.previous_code as the baseline, but implement the feedback_bundle through visible rendering changes.",
         "In layout_replanning mode, preserve source-grounded data and deterministic artifacts, but revise layout, visual channels, legend/inset placement, rendering semantics, and readability details when needed to address PlanAgent feedback.",
         "If a replanning candidate only changes comments, metadata, or artifact round paths, it has failed the replanning task.",
-        "For waterfall charts with step_02_imports_waterfall_render_table.csv, plot from x_position, bar_height, bar_bottom, bar_width, role, color_role, and series. Map color_role values increase/decrease/total exactly; do not test for positive/negative unless those strings are actually present in the artifact. Do not use step_02_imports_waterfall_values.csv as ordinary bar heights.",
-        "For area charts with step_03_consumption_area_values.csv, plot from Urban_fill_bottom/Urban_fill_top and Rural_fill_bottom/Rural_fill_top. Respect composition_policy; overlap means independent translucent areas, additive_stack means cumulative stacking.",
+        "For waterfall charts with artifact_role=waterfall_geometry, plot from x_position, bar_height, bar_bottom, bar_width, role, change_role, fill_color_role, and series when those columns exist. Use the protocol visual_channel_policy to choose the color field; if fill_color_role is present, prefer it over hard-coded change-direction colors. Do not use source_values artifacts as ordinary bar heights.",
+        "When fill_color is bound to a semantic field such as fill_color_role or series, keep the same field value visually consistent across the layer and do not introduce extra fill-color legend categories such as total unless requested.",
+        "For area charts with artifact_role=area_fill_geometry, discover per-series fill columns from schema columns ending with _fill_bottom/_fill_top. Respect composition_policy; overlap means independent translucent areas, additive_stack means cumulative stacking.",
         "If an explicit axis range is provided in the prepared area artifact columns axis_min/axis_max, apply it to the bound axis.",
-        "Do not overwrite framework-prepared step_*.csv artifacts. If a new intermediate table is needed, write a new filename and explain why in markdown.",
+        "Do not overwrite framework-prepared CSV artifacts. If a new intermediate table is needed, write a new filename and explain why in markdown.",
         "Avoid calling tight_layout/constrained_layout after manually adding inset axes unless the code explicitly preserves all axes positions.",
         "Save exactly one final artifact to `OUTPUT_PATH` when possible.",
         "If using matplotlib, call `fig.savefig(OUTPUT_PATH, bbox_inches='tight')` or `plt.savefig(OUTPUT_PATH, bbox_inches='tight')`.",

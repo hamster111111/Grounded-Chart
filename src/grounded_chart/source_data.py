@@ -225,11 +225,14 @@ def infer_table_schema_type(columns: list[str]) -> str:
 def schema_usage_constraints(*, name: str, columns: list[str]) -> list[str]:
     constraints = [f"{name}: exact columns are {columns}."]
     normalized = {column.strip().lower() for column in columns}
-    if "year" in normalized and {"urban", "rural"}.issubset(normalized):
-        constraints.append(f"{name}: wide table; use Urban/Rural directly or melt before Category/Value logic.")
+    if "year" in normalized and len(columns) >= 3:
+        measure_columns = [column for column in columns if column.strip().lower() != "year"]
+        constraints.append(f"{name}: wide time table; use measure columns {measure_columns} directly or melt before long-form Category/Value logic.")
         constraints.append(f"{name}: do not pivot on Category/Value unless those columns were created first.")
-    if "age group" in normalized and "consumption ratio" in normalized:
-        constraints.append(f"{name}: preserve Age Group and Consumption Ratio semantics.")
+    category_like = [column for column in columns if any(token in column.strip().lower() for token in ("category", "group", "label", "type", "segment"))]
+    ratio_like = [column for column in columns if any(token in column.strip().lower() for token in ("ratio", "rate", "percent", "share", "value"))]
+    if category_like and ratio_like:
+        constraints.append(f"{name}: preserve category columns {category_like} and value/ratio columns {ratio_like} semantics.")
     return constraints
 
 

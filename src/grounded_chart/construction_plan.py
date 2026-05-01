@@ -272,6 +272,7 @@ class HeuristicChartConstructionPlanner:
         evidence_text = _planning_evidence_text(query, context=context)
         normalized = evidence_text.lower()
         files = _source_file_names(source_data_plan)
+        source_columns = _source_columns_by_file(source_data_plan)
         explicit_chart_types = _chart_types_from_text(normalized)
         wants_pies = "pie" in explicit_chart_types
         wants_area = "area" in explicit_chart_types or "stacked area" in normalized
@@ -283,8 +284,8 @@ class HeuristicChartConstructionPlanner:
         panels: list[VisualPanelPlan] = []
         global_elements: list[dict[str, Any]] = []
         assumptions: list[str] = []
-        data_transform_plan = _data_transform_plan(explicit_chart_types, files, normalized)
-        execution_steps = _execution_steps(explicit_chart_types, files, normalized)
+        data_transform_plan = _data_transform_plan(explicit_chart_types, files, normalized, source_columns=source_columns)
+        execution_steps = _execution_steps(explicit_chart_types, files, normalized, source_columns=source_columns)
         style_policy = _style_policy(explicit_chart_types, normalized)
 
         layout_strategy = "single_panel"
@@ -320,33 +321,37 @@ class HeuristicChartConstructionPlanner:
                 )
             )
 
-        main_layers = _main_layers(explicit_chart_types, files, normalized)
+        main_layers = _main_layers(explicit_chart_types, files, normalized, source_columns=source_columns)
         if wants_area:
             area_modifiers = _area_semantic_modifiers(evidence_text)
             composition_policy = str(area_modifiers.get("composition") or "additive_stack")
+            area_source = _match_file(files, "consumption") or _best_table_for_chart_type(files, source_columns, "area")
+            area_columns = source_columns.get(area_source or "", set())
+            area_x = _infer_x_column(area_columns, normalized=normalized)
+            area_series = tuple(_infer_measure_columns(area_columns, exclude={area_x}))
             main_layers.append(
                 VisualLayerPlan(
                     layer_id="layer.consumption_area",
                     chart_type="area",
                     role="stacked_area",
-                    data_source=_match_file(files, "consumption"),
-                    x="Year",
-                    y=("Urban", "Rural"),
+                    data_source=area_source,
+                    x=area_x,
+                    y=area_series,
                     axis="secondary" if wants_dual_axis else "primary",
                     status="explicit",
                     rationale="Area/stacked area requirement detected in instruction.",
                     encoding={
-                        "x": "Year",
-                        "series": ["Urban", "Rural"],
+                        "x": area_x,
+                        "series": list(area_series),
                         "mark": "area",
                         "composition": composition_policy,
                     },
                     data_transform=(
-                        {"op": "sort", "by": "Year", "direction": "ascending", "status": "inferred_from_time_axis"},
+                        {"op": "sort", "by": area_x, "direction": "ascending", "status": "inferred_from_time_axis"},
                         {
                             "op": "preserve_or_melt_wide_series",
-                            "x": "Year",
-                            "series_columns": ["Urban", "Rural"],
+                            "x": area_x,
+                            "series_columns": list(area_series),
                             "status": "inferred_from_chart_type",
                         },
                         {
@@ -396,6 +401,12 @@ class HeuristicChartConstructionPlanner:
 
         if wants_pies:
             pie_years = _extract_years(text)
+            pie_source = _match_file(files, "ratio") or _best_table_for_chart_type(files, source_columns, "pie")
+            pie_columns = source_columns.get(pie_source or "", set())
+            pie_filter_column = _infer_x_column(pie_columns, normalized=normalized) or "Year"
+            pie_category = _infer_category_column(pie_columns) or "category"
+            pie_values = tuple(_infer_measure_columns(pie_columns, exclude={pie_filter_column, pie_category})) or ("value",)
+            pie_value = pie_values[0]
             if not pie_years:
                 assumptions.append("Use evenly spaced inset positions for pie charts because exact target years are not specified.")
             for index, year in enumerate(pie_years or ()):
@@ -410,16 +421,16 @@ class HeuristicChartConstructionPlanner:
                                 layer_id=f"layer.pie_{year}",
                                 chart_type="pie",
                                 role="ratio_breakdown",
-                                data_source=_match_file(files, "ratio"),
-                                x="Age Group",
-                                y=("Consumption Ratio",),
+                                data_source=pie_source,
+                                x=pie_category,
+                                y=(pie_value,),
                                 axis="inset",
                                 status="explicit",
                                 rationale=f"Pie chart required for {year}.",
-                                encoding={"filter": {"Year": year}, "labels": "Age Group", "values": "Consumption Ratio"},
+                                encoding={"filter": {pie_filter_column: year}, "labels": pie_category, "values": pie_value},
                                 data_transform=(
-                                    {"op": "filter", "column": "Year", "value": year, "status": "explicit"},
-                                    {"op": "preserve_category_value", "category": "Age Group", "value": "Consumption Ratio"},
+                                    {"op": "filter", "column": pie_filter_column, "value": year, "status": "explicit"},
+                                    {"op": "preserve_category_value", "category": pie_category, "value": pie_value},
                                 ),
                                 style_policy={
                                     "labels": "compact",
@@ -670,7 +681,7 @@ def _validate_layer_plan(
                 )
     if chart_type == "waterfall":
         components = {str(item.get("type") or "") for item in list(layer.get("components") or []) if isinstance(item, dict)}
-        required = {"start_bars", "delta_bars", "final_total_bars", "connector_lines"}
+        required = {"start_bars", "delta_bars", "connector_lines"}
         missing = sorted(required - components)
         if missing:
             issues.append(
@@ -784,88 +795,106 @@ def _chart_types_from_text(normalized: str) -> set[str]:
     return chart_types
 
 
-def _main_layers(chart_types: set[str], files: list[str], normalized: str) -> list[VisualLayerPlan]:
+def _main_layers(
+    chart_types: set[str],
+    files: list[str],
+    normalized: str,
+    *,
+    source_columns: dict[str, set[str]] | None = None,
+) -> list[VisualLayerPlan]:
     layers: list[VisualLayerPlan] = []
+    source_columns = source_columns or {}
     if "waterfall" in chart_types:
+        source = _match_file(files, "import") or _best_table_for_chart_type(files, source_columns, "waterfall")
+        columns = source_columns.get(source or "", set())
+        x_column = _infer_x_column(columns, normalized=normalized)
+        series_columns = tuple(_infer_measure_columns(columns, exclude={x_column}))
         layers.append(
             VisualLayerPlan(
                 layer_id="layer.import_waterfall",
                 chart_type="waterfall",
                 role="yearly_change_bars",
-                data_source=_match_file(files, "import"),
-                x="Year",
-                y=("Urban", "Rural"),
+                data_source=source,
+                x=x_column,
+                y=series_columns,
                 axis="primary",
                 status="explicit",
                 rationale="Waterfall requirement detected in instruction.",
                 encoding={
-                    "x": "Year",
-                    "series": ["Urban", "Rural"],
+                    "x": x_column,
+                    "series": list(series_columns),
                     "mark": "bar",
-                    "semantics": "direct source values with initial/change/final-total roles",
+                    "semantics": "direct source values with geometry roles separated from visual color roles",
                 },
                 data_transform=(
-                    {"op": "sort", "by": "Year", "direction": "ascending", "status": "inferred_from_time_axis"},
+                    {"op": "sort", "by": x_column, "direction": "ascending", "status": "inferred_from_time_axis"},
                     {
                         "op": "direct_use_source_values",
-                        "columns": ["Urban", "Rural"],
-                        "precondition": "Imports.csv values are the values to plot for each year; do not apply adjacent-row differencing unless the source explicitly stores cumulative totals.",
-                        "output": "execution/round_1/step_02_imports_waterfall_values.csv",
+                        "columns": list(series_columns),
+                        "precondition": "Source values are the values to plot for each x value; do not apply adjacent-row differencing unless the source explicitly stores cumulative totals.",
+                        "output_role": "source_values",
                     },
                     {
                         "op": "assign_waterfall_roles",
-                        "roles": {"first_year": "initial", "middle_years": "annual_change", "last_year": "cumulative_total"},
+                        "roles": {"first_year": "initial", "middle_years": "annual_change", "last_year": "terminal_total_if_required_by_protocol"},
                     },
                     {
                         "op": "compute_waterfall_render_geometry",
-                        "input": "execution/round_1/step_02_imports_waterfall_values.csv",
-                        "output": "execution/round_1/step_02_imports_waterfall_render_table.csv",
+                        "input_role": "source_values",
+                        "output_role": "waterfall_geometry",
                         "semantics": "convert source initial/delta/total rows into bar_bottom, bar_height, and bar_top for plotting",
                     },
                 ),
                 components=(
                     {"type": "start_bars", "status": "inferred_from_chart_type"},
                     {"type": "delta_bars", "positive_color": "imports_positive", "negative_color": "imports_negative"},
-                    {"type": "final_total_bars", "status": "inferred_from_chart_type"},
+                    {"type": "terminal_bars", "status": "protocol_dependent"},
                     {"type": "connector_lines", "style": "dotted", "status": "inferred_from_chart_type"},
                     {"type": "cumulative_markers", "marker": "square", "status": "inferred_from_chart_type"},
                 ),
                 visual_channel_plan={
-                    "channel_contract": "multi_semantic_waterfall_encoding_v1",
+                    "channel_contract": "case_specific_waterfall_encoding_v2",
                     "dimensions": {
                         "series_identity": {
                             "field": "series",
-                            "values": ["Urban", "Rural"],
-                            "source": "Imports.csv wide columns",
+                            "values": list(series_columns),
+                            "source": f"{source} measure columns" if source else "source measure columns",
                             "status": "explicit_data_schema",
                         },
-                        "change_role": {
-                            "field": "color_role",
-                            "values": ["increase", "decrease", "total"],
+                        "geometry_role": {
+                            "field": "role",
+                            "values": ["initial", "delta", "total"],
                             "source": "waterfall render geometry",
-                            "status": "inferred_from_waterfall_protocol",
+                            "status": "protocol_dependent",
+                        },
+                        "change_direction": {
+                            "field": "change_role",
+                            "values": ["increase", "decrease", "terminal_total"],
+                            "source": "waterfall render geometry",
+                            "status": "available_as_auxiliary_semantic",
                         },
                     },
                     "channel_allocation": {
                         "x_group_offset": {
                             "field": "series",
-                            "purpose": "distinguish Urban and Rural side-by-side within each year",
+                            "purpose": "distinguish source series side-by-side within each x value",
                             "required": True,
                         },
                         "fill_color": {
-                            "field": "color_role",
-                            "purpose": "distinguish increase, decrease, and final total bars",
+                            "field": "series",
+                            "purpose": "distinguish source series unless the case-specific protocol explicitly assigns fill color to change direction",
                             "required": True,
                         },
-                        "secondary_series_cue": {
-                            "field": "series",
-                            "preferred_channels": ["edge_style", "hatch", "compact_series_legend"],
-                            "required_if_series_identity_is_not_visually_clear": True,
+                        "auxiliary_change_cue": {
+                            "field": "change_role",
+                            "preferred_channels": ["edge_style", "hatch", "marker", "connector_style"],
+                            "required_if_protocol_assigns_change_direction": True,
                         },
                     },
                     "legend_policy": {
                         "avoid_flattening_dimensions": True,
-                        "represent_change_role_and_series_identity_as_separate_semantics": True,
+                        "represent_series_identity_as_primary_semantic": True,
+                        "do_not_introduce_total_color_without_protocol_or_request_evidence": True,
                     },
                 },
                 style_policy={
@@ -884,30 +913,32 @@ def _main_layers(chart_types: set[str], files: list[str], normalized: str) -> li
                 layer_id="layer.bar",
                 chart_type="bar",
                 role="main_bar_layer",
-                data_source=_match_file(files, "import") or _first_file(files),
-                x="Year" if "year" in normalized else None,
+                data_source=_best_table_for_chart_type(files, source_columns, "bar") or _first_file(files),
+                x=_infer_x_column(source_columns.get((_best_table_for_chart_type(files, source_columns, "bar") or _first_file(files) or ""), set()), normalized=normalized),
                 axis="primary",
                 status="explicit",
                 rationale="Bar requirement detected in instruction.",
-                encoding={"x": "Year" if "year" in normalized else None, "mark": "bar"},
+                encoding={"x": _infer_x_column(source_columns.get((_best_table_for_chart_type(files, source_columns, "bar") or _first_file(files) or ""), set()), normalized=normalized), "mark": "bar"},
                 style_policy={"alpha": 0.85},
                 z_order=2,
             )
         )
     if "line" in chart_types or _wants_trend_line(normalized):
+        source = _best_table_for_chart_type(files, source_columns, "line") or _first_file(files)
+        x_column = _infer_x_column(source_columns.get(source or "", set()), normalized=normalized)
         layers.append(
             VisualLayerPlan(
                 layer_id="layer.trend_line",
                 chart_type="line",
                 role="trend_or_cumulative_total",
-                data_source=_match_file(files, "import") or _first_file(files),
-                x="Year" if "year" in normalized else None,
+                data_source=source,
+                x=x_column,
                 axis="primary",
                 status="explicit" if "line" in chart_types else "inferred",
                 rationale="Trend/cumulative wording benefits from a line layer for executable visual structure.",
-                encoding={"x": "Year" if "year" in normalized else None, "mark": "line", "semantics": "trend_or_cumulative_total"},
+                encoding={"x": x_column, "mark": "line", "semantics": "trend_or_cumulative_total"},
                 data_transform=(
-                    {"op": "sort", "by": "Year", "direction": "ascending", "status": "inferred_from_time_axis"},
+                    {"op": "sort", "by": x_column, "direction": "ascending", "status": "inferred_from_time_axis"},
                 ),
                 style_policy={"line_style": "dashed", "marker": "diamond", "linewidth": 1.8},
                 z_order=4,
@@ -916,71 +947,98 @@ def _main_layers(chart_types: set[str], files: list[str], normalized: str) -> li
     return layers
 
 
-def _data_transform_plan(chart_types: set[str], files: list[str], normalized: str) -> list[dict[str, Any]]:
+def _data_transform_plan(
+    chart_types: set[str],
+    files: list[str],
+    normalized: str,
+    *,
+    source_columns: dict[str, set[str]] | None = None,
+) -> list[dict[str, Any]]:
     transforms: list[dict[str, Any]] = []
+    source_columns = source_columns or {}
+    default_source = _first_file(files)
+    default_x = _infer_x_column(source_columns.get(default_source or "", set()), normalized=normalized) or ("Year" if "year" in normalized else None)
     if "year" in normalized:
         transforms.append(
             {
                 "transform_id": "transform.sort_by_year",
                 "op": "sort",
-                "by": "Year",
+                "by": default_x,
                 "direction": "ascending",
                 "status": "inferred_from_time_axis",
                 "applies_to": files or "all_tables_with_year",
             }
         )
     if "waterfall" in chart_types:
+        source = _match_file(files, "import") or _best_table_for_chart_type(files, source_columns, "waterfall")
+        x_column = _infer_x_column(source_columns.get(source or "", set()), normalized=normalized)
+        series_columns = _infer_measure_columns(source_columns.get(source or "", set()), exclude={x_column})
         transforms.extend(
             [
                 {
-                    "transform_id": "transform.imports_waterfall_direct_values",
+                    "transform_id": "transform.waterfall_source_values",
                     "op": "direct_use_source_values",
-                    "columns": ["Urban", "Rural"],
+                    "columns": series_columns,
                     "status": "inferred_from_chart_type",
-                    "input": _match_file(files, "import") or "Imports.csv",
-                    "output": "execution/round_1/step_02_imports_waterfall_values.csv",
+                    "input": source,
+                    "output_role": "source_values",
                     "precondition": "The source table columns are the values to display for each year.",
-                    "assertion": "plotted Urban/Rural values must equal source Urban/Rural values row by row.",
+                    "assertion": "plotted series values must equal source series values row by row.",
                 },
                 {
-                    "transform_id": "transform.imports_waterfall_render_geometry",
+                    "transform_id": "transform.waterfall_render_geometry",
                     "op": "compute_waterfall_render_geometry",
-                    "columns": ["Urban", "Rural"],
+                    "columns": series_columns,
                     "status": "inferred_from_chart_type_protocol",
-                    "input": "execution/round_1/step_02_imports_waterfall_values.csv",
-                    "output": "execution/round_1/step_02_imports_waterfall_render_table.csv",
+                    "input_role": "source_values",
+                    "output_role": "waterfall_geometry",
                     "assertion": "delta bars start at the previous cumulative total; final total bars start from zero.",
                 },
             ]
         )
     if "area" in chart_types:
         area_modifiers = _area_semantic_modifiers(normalized)
+        source = _match_file(files, "consumption") or _best_table_for_chart_type(files, source_columns, "area")
+        x_column = _infer_x_column(source_columns.get(source or "", set()), normalized=normalized)
+        series_columns = _infer_measure_columns(source_columns.get(source or "", set()), exclude={x_column})
         transforms.append(
             {
                 "transform_id": "transform.area_wide_to_series",
                 "op": "preserve_or_melt_wide_series",
-                "x": "Year",
-                "series_columns": ["Urban", "Rural"],
+                "x": x_column,
+                "series_columns": series_columns,
                 "status": "inferred_from_chart_type",
                 "semantic_modifiers": area_modifiers,
             }
         )
     if "pie" in chart_types:
+        source = _match_file(files, "ratio") or _best_table_for_chart_type(files, source_columns, "pie")
+        columns = source_columns.get(source or "", set())
+        anchor_column = _infer_x_column(columns, normalized=normalized) or "Year"
+        category = _infer_category_column(columns) or "category"
+        value = (_infer_measure_columns(columns, exclude={anchor_column, category}) or ["value"])[0]
         transforms.append(
             {
                 "transform_id": "transform.pie_filter_by_anchor",
                 "op": "filter_per_requested_anchor",
-                "anchor_column": "Year",
-                "category": "Age Group",
-                "value": "Consumption Ratio",
+                "anchor_column": anchor_column,
+                "category": category,
+                "value": value,
                 "status": "explicit_if_years_mentioned_else_inferred",
             }
         )
     return transforms
 
 
-def _execution_steps(chart_types: set[str], files: list[str], normalized: str) -> list[dict[str, Any]]:
+def _execution_steps(
+    chart_types: set[str],
+    files: list[str],
+    normalized: str,
+    *,
+    source_columns: dict[str, set[str]] | None = None,
+) -> list[dict[str, Any]]:
     steps: list[dict[str, Any]] = []
+    source_columns = source_columns or {}
     if files:
         steps.append(
             {
@@ -994,24 +1052,23 @@ def _execution_steps(chart_types: set[str], files: list[str], normalized: str) -
             }
         )
     if "waterfall" in chart_types:
+        source = _match_file(files, "import") or _best_table_for_chart_type(files, source_columns, "waterfall")
+        x_column = _infer_x_column(source_columns.get(source or "", set()), normalized=normalized)
+        series_columns = _infer_measure_columns(source_columns.get(source or "", set()), exclude={x_column})
         steps.append(
             {
-                "step_id": "step_02_prepare_imports_waterfall",
+                "step_id": "step_prepare_waterfall_artifacts",
                 "stage": "execution",
-                "action": "sort_copy_import_values_and_compute_waterfall_geometry",
-                "inputs": [_match_file(files, "import") or "Imports.csv"],
-                "outputs": [
-                    "execution/round_1/step_02_imports_waterfall_values.csv",
-                    "execution/round_1/step_02_imports_waterfall_render_table.csv",
-                ],
-                "purpose": "Prepare source values and protocol-grounded bar geometry for the import waterfall layer.",
-                "script": "execution/round_1/step_02_transform_imports.py",
+                "action": "sort_copy_source_values_and_compute_waterfall_geometry",
+                "inputs": [source],
+                "outputs": ["artifact_role=source_values", "artifact_role=waterfall_geometry"],
+                "purpose": "Prepare source values and protocol-grounded bar geometry for the waterfall layer.",
+                "script": "execution/round_1/transform_waterfall.py",
                 "assertions": [
                     "row_count equals source row_count",
-                    "Year values are sorted ascending",
-                    "Urban_plot equals source Urban",
-                    "Rural_plot equals source Rural",
-                    "render table has bar_bottom, bar_height, bar_top, role, color_role, and series",
+                    f"{x_column} values are sorted ascending" if x_column else "x values preserve source order",
+                    f"series values {series_columns} equal source values row by row",
+                    "render table has bar_bottom, bar_height, bar_top, role, change_role, fill_color_role, and series",
                     "delta bar bottoms equal the previous cumulative value for the same series",
                     "no adjacent-row differencing is applied unless a future plan step explicitly justifies it",
                 ],
@@ -1020,41 +1077,48 @@ def _execution_steps(chart_types: set[str], files: list[str], normalized: str) -
     if "area" in chart_types:
         area_modifiers = _area_semantic_modifiers(normalized)
         composition_policy = str(area_modifiers.get("composition") or "additive_stack")
+        source = _match_file(files, "consumption") or _best_table_for_chart_type(files, source_columns, "area")
+        x_column = _infer_x_column(source_columns.get(source or "", set()), normalized=normalized)
+        series_columns = _infer_measure_columns(source_columns.get(source or "", set()), exclude={x_column})
         steps.append(
             {
-                "step_id": "step_03_prepare_consumption_area",
+                "step_id": "step_prepare_area_artifacts",
                 "stage": "execution",
                 "action": "sort_and_prepare_area_fill_geometry",
-                "inputs": [_match_file(files, "consumption") or "Consumption.csv"],
-                "outputs": ["execution/round_1/step_03_consumption_area_values.csv"],
-                "purpose": "Prepare Urban/Rural consumption values and modifier-grounded fill geometry for the secondary area layer.",
-                "script": "execution/round_1/step_03_transform_consumption.py",
+                "inputs": [source],
+                "outputs": ["artifact_role=area_fill_geometry"],
+                "purpose": "Prepare source series values and modifier-grounded fill geometry for the area layer.",
+                "script": "execution/round_1/transform_area.py",
                 "semantic_modifiers": area_modifiers,
                 "assertions": [
-                    "Urban_area equals source Urban",
-                    "Rural_area equals source Rural",
+                    f"area series {series_columns} equal source values row by row",
                     f"composition_policy equals {composition_policy}",
-                    "overlap composition uses independent fill intervals rather than Urban + Rural stacking",
+                    "overlap composition uses independent fill intervals rather than additive stacking",
                     "additive_stack composition uses cumulative stack tops",
                     "x_index is shared with other year-based layers",
                 ],
             }
         )
     if "pie" in chart_types:
+        source = _match_file(files, "ratio") or _best_table_for_chart_type(files, source_columns, "pie")
+        columns = source_columns.get(source or "", set())
+        anchor_column = _infer_x_column(columns, normalized=normalized) or "Year"
+        category = _infer_category_column(columns) or "category"
+        value = (_infer_measure_columns(columns, exclude={anchor_column, category}) or ["value"])[0]
         steps.append(
             {
-                "step_id": "step_04_prepare_pie_values",
+                "step_id": "step_prepare_categorical_artifacts",
                 "stage": "execution",
-                "action": "filter_ratio_table_for_requested_years",
-                "inputs": [_match_file(files, "ratio") or "Grain_Consumption_Ratio.csv"],
-                "outputs": ["execution/round_1/step_04_pie_values.csv"],
-                "purpose": "Prepare age-group ratio values for each requested pie chart.",
-                "script": "execution/round_1/step_04_transform_pies.py",
+                "action": "filter_category_value_table_for_requested_anchors",
+                "inputs": [source],
+                "outputs": ["artifact_role=categorical_values"],
+                "purpose": "Prepare category/value rows for each requested categorical inset chart.",
+                "script": "execution/round_1/transform_categorical.py",
                 "assertions": [
-                    "only requested years are included",
-                    "Age Group labels are preserved",
-                    "Consumption Ratio values are preserved",
-                    "normalized pie percentages are recorded separately from raw values",
+                    f"only requested {anchor_column} values are included",
+                    f"{category} labels are preserved",
+                    f"{value} values are preserved",
+                    "normalized percentages are recorded separately from raw values",
                 ],
             }
         )
@@ -1064,11 +1128,7 @@ def _execution_steps(chart_types: set[str], files: list[str], normalized: str) -
                 "step_id": "step_05_plot_figure",
                 "stage": "execution",
                 "action": "plot_from_prepared_artifacts",
-                "inputs": [
-                    "execution/round_1/step_02_imports_waterfall_render_table.csv",
-                    "execution/round_1/step_03_consumption_area_values.csv",
-                    "execution/round_1/step_04_pie_values.csv",
-                ],
+                "inputs": ["artifact_workspace required_for_plotting CSV artifacts"],
                 "outputs": ["execution/round_1/plot_spec.md", "execution/round_1/plot.py", "figure.png"],
                 "purpose": "Render the final figure using prepared artifacts rather than recomputing hidden transformations inside plotting code.",
                 "script": "execution/round_1/plot.py",
@@ -1122,6 +1182,73 @@ def _match_file(files: list[str], keyword: str) -> str | None:
 
 def _first_file(files: list[str]) -> str | None:
     return files[0] if files else None
+
+
+def _best_table_for_chart_type(files: list[str], source_columns: dict[str, set[str]], chart_type: str) -> str | None:
+    if not files:
+        return None
+    keywords = {
+        "waterfall": ("import", "change", "flow", "waterfall"),
+        "area": ("consumption", "area", "trend"),
+        "pie": ("ratio", "share", "breakdown", "category"),
+        "bar": ("bar", "value", "count"),
+        "line": ("trend", "line", "time"),
+    }.get(chart_type, ())
+    for keyword in keywords:
+        match = _match_file(files, keyword)
+        if match:
+            return match
+    for name in files:
+        columns = source_columns.get(name, set())
+        if _infer_x_column(columns, normalized="year time date") and _infer_measure_columns(columns, exclude={_infer_x_column(columns, normalized="year time date")}):
+            return name
+    return files[0]
+
+
+def _infer_x_column(columns: set[str], *, normalized: str) -> str | None:
+    if not columns:
+        return "Year" if "year" in normalized else None
+    by_lower = {column.lower(): column for column in columns}
+    for preferred in ("year", "date", "time", "month", "quarter", "category"):
+        if preferred in by_lower:
+            return by_lower[preferred]
+    if "year" in normalized:
+        for column in columns:
+            if "year" in column.lower():
+                return column
+    for column in columns:
+        if not _looks_measure_column_name(column):
+            return column
+    return next(iter(sorted(columns))) if columns else None
+
+
+def _infer_measure_columns(columns: set[str], *, exclude: set[str | None]) -> list[str]:
+    excluded = {str(item) for item in exclude if item}
+    candidates = [column for column in sorted(columns) if column not in excluded]
+    measures = [column for column in candidates if _looks_measure_column_name(column)]
+    return measures or candidates[:2]
+
+
+def _infer_category_column(columns: set[str]) -> str | None:
+    if not columns:
+        return None
+    by_lower = {column.lower(): column for column in columns}
+    for preferred in ("category", "age group", "group", "label", "type", "segment"):
+        if preferred in by_lower:
+            return by_lower[preferred]
+    for column in sorted(columns):
+        if not _looks_measure_column_name(column) and column.lower() not in {"year", "date", "time", "month"}:
+            return column
+    return next(iter(sorted(columns)))
+
+
+def _looks_measure_column_name(column: str) -> bool:
+    lowered = str(column or "").strip().lower()
+    if lowered in {"year", "date", "time", "month", "quarter", "category", "label", "group", "age group"}:
+        return False
+    if any(token in lowered for token in ("ratio", "rate", "percent", "value", "amount", "count", "score", "sales", "quantity", "total")):
+        return True
+    return True
 
 
 def _mentions_multiple_panels(normalized: str) -> bool:

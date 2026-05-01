@@ -44,8 +44,42 @@ class ArtifactWorkspaceReport:
         }
 
 
+@dataclass(frozen=True)
+class ArtifactRequest:
+    artifact_id: str
+    layer_id: str
+    chart_type: str
+    artifact_role: str
+    source_table: str
+    x_column: str | None = None
+    series_columns: tuple[str, ...] = ()
+    category_column: str | None = None
+    value_column: str | None = None
+    filter_column: str | None = None
+    filter_values: tuple[Any, ...] = ()
+    transform_ops: tuple[str, ...] = ()
+    semantic_modifiers: dict[str, Any] = field(default_factory=dict)
+    output_name: str = ""
+    required_for_plotting: bool = True
+    contract_tier: str = "hard_fidelity"
+    aliases: tuple[str, ...] = ()
+    assertions: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["series_columns"] = list(self.series_columns)
+        payload["filter_values"] = list(self.filter_values)
+        payload["transform_ops"] = list(self.transform_ops)
+        payload["aliases"] = list(self.aliases)
+        payload["assertions"] = list(self.assertions)
+        return payload
+
+
 class ArtifactWorkspaceBuilder:
     """Create human- and machine-readable artifacts for one pipeline round."""
+
+    def __init__(self, *, protocol_agent: ChartProtocolAgent | None = None) -> None:
+        self.protocol_agent = protocol_agent
 
     def build(
         self,
@@ -87,14 +121,6 @@ class ArtifactWorkspaceBuilder:
         steps_md.write_text(render_execution_steps_markdown(construction_plan), encoding="utf-8")
         artifacts.append(_artifact("steps.md", steps_md, "execution step contract"))
 
-        protocol_result = build_chart_protocol_artifacts(
-            workspace=workspace,
-            construction_plan=construction_plan,
-        )
-        artifacts.extend(protocol_result.artifacts)
-        issues.extend(protocol_result.issues)
-        protocols = tuple(protocol_result.metadata.get("protocols") or ())
-
         if source_execution is not None:
             generated = build_execution_artifacts(
                 workspace=workspace,
@@ -112,8 +138,24 @@ class ArtifactWorkspaceBuilder:
                 }
             )
 
+        protocol_result = build_chart_protocol_artifacts(
+            workspace=workspace,
+            construction_plan=construction_plan,
+            query=query,
+            source_plan=source_plan,
+            source_execution=source_execution,
+            prepared_artifacts=tuple(artifacts),
+            agent=self.protocol_agent,
+        )
+        artifacts.extend(protocol_result.artifacts)
+        issues.extend(protocol_result.issues)
+        protocols = tuple(protocol_result.metadata.get("protocols") or ())
+
         plot_spec = workspace.execution_dir / "plot_spec.md"
-        plot_spec.write_text(render_plot_spec_markdown(construction_plan, protocols=protocols), encoding="utf-8")
+        plot_spec.write_text(
+            render_plot_spec_markdown(construction_plan, artifacts=tuple(artifacts), protocols=protocols),
+            encoding="utf-8",
+        )
         artifacts.append(_artifact("plot_spec.md", plot_spec, "plotting contract over prepared artifacts"))
 
         manifest = workspace.root / "artifact_workspace_manifest.json"
@@ -167,48 +209,19 @@ def build_execution_artifacts(
     _write_json(summary_path, _source_summary_payload(tables))
     artifacts.append(_artifact("step_01_sources_summary.json", summary_path, "loaded source schema and row-count summary"))
 
-    imports_name = _layer_source(construction_plan, role="yearly_change_bars") or _match_table_name(tables, "import")
-    if imports_name and imports_name in tables:
-        path, issue = _write_imports_waterfall_values(workspace.execution_dir, tables[imports_name])
-        artifacts.append(_artifact("step_02_imports_waterfall_values.csv", path, "direct source values for import waterfall layer"))
-        if issue:
-            issues.append(issue)
-        if _has_chart_type(construction_plan, "waterfall"):
-            render_path, render_issue = _write_imports_waterfall_render_table(workspace.execution_dir, tables[imports_name])
-            artifacts.append(
-                _artifact(
-                    "step_02_imports_waterfall_render_table.csv",
-                    render_path,
-                    "protocol-grounded bar geometry for import waterfall layer",
-                )
-            )
-            if render_issue:
-                issues.append(render_issue)
-    elif _has_chart_type(construction_plan, "waterfall"):
-        issues.append(_missing_table_issue("imports_waterfall", imports_name or "Imports.csv"))
+    requests = compile_artifact_requests(construction_plan, tables=tables)
+    request_path = workspace.execution_dir / "artifact_requests.json"
+    _write_json(request_path, {"requests": [request.to_dict() for request in requests]})
+    artifacts.append(_artifact("artifact_requests.json", request_path, "compiled deterministic artifact requests"))
 
-    consumption_name = _layer_source(construction_plan, role="stacked_area") or _match_table_name(tables, "consumption")
-    if consumption_name and consumption_name in tables:
-        path, issue = _write_consumption_area_values(
-            workspace.execution_dir,
-            tables[consumption_name],
-            construction_plan=construction_plan,
-        )
-        artifacts.append(_artifact("step_03_consumption_area_values.csv", path, "stacked area values for consumption layer"))
-        if issue:
-            issues.append(issue)
-    elif _has_chart_type(construction_plan, "area"):
-        issues.append(_missing_table_issue("consumption_area", consumption_name or "Consumption.csv"))
-
-    ratio_name = _layer_source(construction_plan, role="ratio_breakdown") or _match_table_name(tables, "ratio")
-    if ratio_name and ratio_name in tables:
-        years = _pie_years(construction_plan)
-        path, issue = _write_pie_values(workspace.execution_dir, tables[ratio_name], years=years)
-        artifacts.append(_artifact("step_04_pie_values.csv", path, "pie values with raw and normalized percentages"))
-        if issue:
-            issues.append(issue)
-    elif _has_chart_type(construction_plan, "pie"):
-        issues.append(_missing_table_issue("pie_values", ratio_name or "Grain_Consumption_Ratio.csv"))
+    for request in requests:
+        table = tables.get(request.source_table)
+        if not table:
+            issues.append(_missing_table_issue(request.artifact_role, request.source_table))
+            continue
+        generated, request_issues = _execute_artifact_request(workspace.execution_dir, request, table)
+        artifacts.extend(generated)
+        issues.extend(request_issues)
 
     return _GeneratedArtifacts(artifacts=tuple(artifacts), issues=tuple(issues))
 
@@ -217,6 +230,10 @@ def build_chart_protocol_artifacts(
     *,
     workspace: ArtifactWorkspace,
     construction_plan: ChartConstructionPlan,
+    query: str = "",
+    source_plan: SourceDataPlan | None = None,
+    source_execution: SourceDataExecution | None = None,
+    prepared_artifacts: tuple[dict[str, Any], ...] = (),
     agent: ChartProtocolAgent | None = None,
 ) -> _GeneratedArtifacts:
     chart_types = _chart_types(construction_plan)
@@ -227,7 +244,17 @@ def build_chart_protocol_artifacts(
     protocol_dir = workspace.execution_dir / "chart_protocols"
     protocol_dir.mkdir(parents=True, exist_ok=True)
     for chart_type in chart_types:
-        protocol = protocol_agent.build_protocol(chart_type=chart_type, context={"construction_plan": construction_plan.to_dict()})
+        protocol = protocol_agent.build_protocol(
+            chart_type=chart_type,
+            context={
+                "query": query,
+                "construction_plan": construction_plan.to_dict(),
+                "source_data_plan": source_plan.to_dict() if source_plan is not None else None,
+                "source_data_execution": source_execution.to_dict() if source_execution is not None else None,
+                "prepared_artifacts": [dict(item) for item in prepared_artifacts],
+                "round_id": workspace.round_id,
+            },
+        )
         validation = validate_protocol(protocol)
         base_name = f"{_safe_filename(chart_type)}_protocol"
         json_path = protocol_dir / f"{base_name}.json"
@@ -340,8 +367,16 @@ def render_protocol_markdown(protocol: ChartRenderingProtocol, validation_report
         f"- source: {protocol.source}",
         f"- validation_ok: {validation_report.ok}",
         "",
-        "## Rendering Rules",
+        "## Contract Tiers",
     ]
+    for tier, description in protocol.contract_tiers.items():
+        lines.append(f"- {tier}: {description}")
+    lines.extend(
+        [
+            "",
+            "## Rendering Rules",
+        ]
+    )
     lines.extend(f"- {item}" for item in protocol.rendering_rules)
     lines.extend(["", "## Required Artifact Columns"])
     lines.extend(f"- {item}" for item in protocol.required_artifact_columns)
@@ -349,13 +384,22 @@ def render_protocol_markdown(protocol: ChartRenderingProtocol, validation_report
         lines.extend(["", "## Plotting Primitives"])
         for primitive in protocol.plotting_primitives:
             lines.append(f"- {primitive}")
+    if protocol.visual_channel_contracts:
+        lines.extend(["", "## Minimal Visual Channel Contracts"])
+        for contract in protocol.visual_channel_contracts:
+            lines.append(f"- {contract.to_dict()}")
     if protocol.forbidden_shortcuts:
         lines.extend(["", "## Forbidden Shortcuts"])
         lines.extend(f"- {item}" for item in protocol.forbidden_shortcuts)
     return "\n".join(lines).strip() + "\n"
 
 
-def render_plot_spec_markdown(construction_plan: ChartConstructionPlan, *, protocols: tuple[dict[str, Any], ...] = ()) -> str:
+def render_plot_spec_markdown(
+    construction_plan: ChartConstructionPlan,
+    *,
+    artifacts: tuple[dict[str, Any], ...] = (),
+    protocols: tuple[dict[str, Any], ...] = (),
+) -> str:
     lines = [
         "# Plot Spec Round 1",
         "",
@@ -374,65 +418,263 @@ def render_plot_spec_markdown(construction_plan: ChartConstructionPlan, *, proto
             "",
             "## Chart Protocols",
             "- chart protocols in execution/round_1/chart_protocols/ define chart-type-specific rendering semantics.",
-            "- if a protocol exists for a planned chart type, plotting code must follow the protocol instead of using a generic mark.",
+            "- hard_fidelity protocol commitments must be followed for source-grounded data, deterministic geometry, explicit requirements, and semantic channel bindings.",
+            "- soft_guidance commitments should improve readability and may feed visual feedback/replanning, but should not override hard fidelity.",
+            "- free_design commitments are delegated to ExecutorAgent unless the source request explicitly constrains them.",
         ]
     )
     for protocol in protocols:
         lines.append(f"- {protocol.get('chart_type')}: {protocol.get('protocol_id')}")
+    lines.extend(["", "## Prepared Data Artifacts"])
+    prepared_csvs = [
+        item
+        for item in artifacts
+        if isinstance(item, dict)
+        and str(item.get("name") or "").endswith(".csv")
+        and bool(item.get("required_for_plotting"))
+    ]
+    if not prepared_csvs:
+        lines.append("- no required plotting CSV artifacts were generated for this round.")
+    for artifact in prepared_csvs:
+        schema = artifact.get("schema") if isinstance(artifact.get("schema"), dict) else {}
+        columns = list(schema.get("columns") or artifact.get("columns") or [])
+        lines.append(
+            "- "
+            f"name={artifact.get('name')}, role={artifact.get('artifact_role')}, chart_type={artifact.get('chart_type')}, "
+            f"layer_id={artifact.get('layer_id')}, contract_tier={artifact.get('contract_tier')}, "
+            f"relative_path={artifact.get('relative_path')}, columns={columns}"
+        )
     lines.extend(
         [
             "",
             "## Data Artifact Rules",
-            "- import waterfall bars must use step_02_imports_waterfall_render_table.csv for bar geometry.",
-            "- step_02_imports_waterfall_values.csv records source values and should not be used as ordinary zero-based bar heights when a render table exists.",
-            "- waterfall plotting must call ax.bar or equivalent with bottom=bar_bottom and height=bar_height from the render table.",
-            "- waterfall color_role values are increase, decrease, and total; map those exact values to distinct up/down/total colors.",
-            "- consumption area must use step_03_consumption_area_values.csv.",
-            "- area plotting must obey composition_policy and fill-bottom/fill-top columns in step_03_consumption_area_values.csv.",
-            "- if composition_policy is overlap, draw independent translucent fill_between layers; do not use Urban + Rural as a stacked top.",
-            "- pie charts must use step_04_pie_values.csv.",
-            "- all year-based overlays must use the same x_index or the same raw Year basis consistently.",
+            "- Prepared artifact metadata defines the executable contract: use artifact_role, chart_type, layer_id, contract_tier, relative_path, and schema.columns rather than fixed filenames or guessed columns.",
+            "- If an artifact has role=waterfall_geometry, bars must use bar_bottom and bar_height from that artifact; source-value artifacts are evidence tables, not zero-based bar geometry.",
+            "- If an artifact has role=area_fill_geometry, use its *_fill_bottom and *_fill_top columns and composition_policy rather than recomputing hidden stack geometry.",
+            "- Geometry roles and visual-channel roles are separate; follow chart_protocols and artifact columns such as fill_color_role, series_color_role, series, and change_role.",
+            "- Hard fidelity artifacts are blocking data/geometry inputs; soft guidance may inform readability; free design remains delegated to ExecutorAgent.",
+            "- All overlaid layers that share a conceptual x-axis should use a single x-coordinate basis, either artifact x_index/x_position or raw x values consistently.",
         ]
     )
     return "\n".join(lines).strip() + "\n"
 
 
-def _write_imports_waterfall_values(execution_dir: Path, table: dict[str, Any]) -> tuple[Path, dict[str, Any] | None]:
-    rows = _sort_rows_by_year(table.get("rows") or [])
-    out_rows = []
-    issue = _require_columns(table, {"Year", "Urban", "Rural"}, artifact="step_02_imports_waterfall_values.csv")
-    for index, row in enumerate(rows):
-        role = "annual_change"
-        if index == 0:
-            role = "initial"
-        elif index == len(rows) - 1:
-            role = "cumulative_total"
-        out_rows.append(
-            {
-                "x_index": index,
-                "Year": row.get("Year"),
-                "Urban": row.get("Urban"),
-                "Rural": row.get("Rural"),
-                "Urban_source": row.get("Urban"),
-                "Rural_source": row.get("Rural"),
-                "Urban_plot": row.get("Urban"),
-                "Rural_plot": row.get("Rural"),
-                "waterfall_role": role,
-                "transform": "direct_use_source_values",
-            }
+def compile_artifact_requests(
+    construction_plan: ChartConstructionPlan,
+    *,
+    tables: dict[str, dict[str, Any]],
+) -> tuple[ArtifactRequest, ...]:
+    requests: list[ArtifactRequest] = []
+    pie_groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+
+    for panel in construction_plan.panels:
+        for layer in panel.layers:
+            chart_type = str(layer.chart_type or "").strip().lower()
+            if not chart_type:
+                continue
+            source_table = _resolve_source_table(layer.to_dict(), tables)
+            if not source_table:
+                continue
+            table = tables.get(source_table, {})
+            columns = [str(item) for item in list(table.get("columns") or [])]
+            x_column = _resolve_x_column(layer.to_dict(), columns)
+            if chart_type == "waterfall":
+                series_columns = tuple(_resolve_series_columns(layer.to_dict(), table, x_column=x_column))
+                if not series_columns:
+                    continue
+                base = _request_base(layer.layer_id, chart_type)
+                requests.append(
+                    ArtifactRequest(
+                        artifact_id=f"{base}.source_values",
+                        layer_id=layer.layer_id,
+                        chart_type=chart_type,
+                        artifact_role="source_values",
+                        source_table=source_table,
+                        x_column=x_column,
+                        series_columns=series_columns,
+                        transform_ops=("sort_by_x", "copy_source_values"),
+                        output_name=f"{base}_source_values.csv",
+                        required_for_plotting=False,
+                        aliases=_legacy_aliases(chart_type, "source_values", layer.to_dict()),
+                        assertions=(
+                            "row_count equals source row_count",
+                            "plotted value columns preserve source values row by row",
+                        ),
+                    )
+                )
+                requests.append(
+                    ArtifactRequest(
+                        artifact_id=f"{base}.waterfall_geometry",
+                        layer_id=layer.layer_id,
+                        chart_type=chart_type,
+                        artifact_role="waterfall_geometry",
+                        source_table=source_table,
+                        x_column=x_column,
+                        series_columns=series_columns,
+                        transform_ops=("sort_by_x", "compute_waterfall_geometry"),
+                        output_name=f"{base}_waterfall_geometry.csv",
+                        aliases=_legacy_aliases(chart_type, "waterfall_geometry", layer.to_dict()),
+                        assertions=(
+                            "delta bars start at previous cumulative value for the same series",
+                            "terminal total bars start from zero",
+                            "visual color role is not forced to equal geometry role",
+                        ),
+                    )
+                )
+            elif chart_type == "area":
+                series_columns = tuple(_resolve_series_columns(layer.to_dict(), table, x_column=x_column))
+                if not series_columns:
+                    continue
+                base = _request_base(layer.layer_id, chart_type)
+                requests.append(
+                    ArtifactRequest(
+                        artifact_id=f"{base}.area_fill_geometry",
+                        layer_id=layer.layer_id,
+                        chart_type=chart_type,
+                        artifact_role="area_fill_geometry",
+                        source_table=source_table,
+                        x_column=x_column,
+                        series_columns=series_columns,
+                        transform_ops=("sort_by_x", "compute_area_fill_geometry"),
+                        semantic_modifiers=dict(layer.semantic_modifiers),
+                        output_name=f"{base}_area_fill_geometry.csv",
+                        aliases=_legacy_aliases(chart_type, "area_fill_geometry", layer.to_dict()),
+                        assertions=(
+                            "source series values are preserved",
+                            "composition_policy controls whether fill intervals overlap or accumulate",
+                        ),
+                    )
+                )
+            elif chart_type == "pie":
+                category_column = _resolve_category_column(layer.to_dict(), table)
+                value_column = _resolve_value_column(layer.to_dict(), table, exclude={x_column, category_column})
+                filter_column, filter_values = _resolve_filter(layer.to_dict(), panel.to_dict(), columns)
+                if not category_column or not value_column:
+                    continue
+                key = (source_table, category_column, value_column, filter_column or "")
+                group = pie_groups.setdefault(
+                    key,
+                    {
+                        "layer_ids": [],
+                        "filter_values": [],
+                        "layer": layer.to_dict(),
+                    },
+                )
+                group["layer_ids"].append(layer.layer_id)
+                for value in filter_values:
+                    if value not in group["filter_values"]:
+                        group["filter_values"].append(value)
+            elif chart_type in {"bar", "line", "scatter", "heatmap", "box"}:
+                series_columns = tuple(_resolve_series_columns(layer.to_dict(), table, x_column=x_column))
+                if not x_column and not series_columns:
+                    continue
+                base = _request_base(layer.layer_id, chart_type)
+                requests.append(
+                    ArtifactRequest(
+                        artifact_id=f"{base}.source_values",
+                        layer_id=layer.layer_id,
+                        chart_type=chart_type,
+                        artifact_role="source_values",
+                        source_table=source_table,
+                        x_column=x_column,
+                        series_columns=series_columns,
+                        transform_ops=("sort_by_x", "copy_source_values") if x_column else ("copy_source_values",),
+                        output_name=f"{base}_source_values.csv",
+                        assertions=("source values are preserved row by row",),
+                    )
+                )
+
+    for (source_table, category_column, value_column, filter_column), group in pie_groups.items():
+        layer = group["layer"]
+        layer_ids = [str(item) for item in group["layer_ids"]]
+        base = _request_base(layer_ids[0] if len(layer_ids) == 1 else ".".join(layer_ids), "pie")
+        requests.append(
+            ArtifactRequest(
+                artifact_id=f"{base}.categorical_values",
+                layer_id=",".join(layer_ids),
+                chart_type="pie",
+                artifact_role="categorical_values",
+                source_table=source_table,
+                category_column=category_column,
+                value_column=value_column,
+                filter_column=filter_column or None,
+                filter_values=tuple(group["filter_values"]),
+                transform_ops=("filter_rows", "normalize_percent_by_group"),
+                output_name=f"{base}_categorical_values.csv",
+                aliases=_legacy_aliases("pie", "categorical_values", layer),
+                assertions=(
+                    "category labels are preserved",
+                    "raw values are preserved",
+                    "normalized percentages are recorded separately from raw values",
+                ),
+            )
         )
-    path = execution_dir / "step_02_imports_waterfall_values.csv"
-    _write_csv(path, out_rows)
-    return path, issue
+
+    return tuple(requests)
 
 
-def _write_imports_waterfall_render_table(execution_dir: Path, table: dict[str, Any]) -> tuple[Path, dict[str, Any] | None]:
-    rows = _sort_rows_by_year(table.get("rows") or [])
-    issue = _require_columns(table, {"Year", "Urban", "Rural"}, artifact="step_02_imports_waterfall_render_table.csv")
-    series_names = [name for name in ("Urban", "Rural") if name in {str(item) for item in table.get("columns") or []}]
+def _execute_artifact_request(
+    execution_dir: Path,
+    request: ArtifactRequest,
+    table: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    issues: list[dict[str, Any]] = []
+    required = _required_columns_for_request(request)
+    issue = _require_columns(table, required, artifact=request.output_name) if required else None
+    if issue:
+        issues.append(issue)
+
+    if request.artifact_role == "waterfall_geometry":
+        rows = _waterfall_geometry_rows(table, request)
+        purpose = "protocol-grounded waterfall geometry for a planned visual layer"
+    elif request.artifact_role == "area_fill_geometry":
+        rows = _area_fill_geometry_rows(table, request)
+        purpose = "modifier-grounded area fill geometry for a planned visual layer"
+    elif request.artifact_role == "categorical_values":
+        rows = _categorical_value_rows(table, request)
+        purpose = "filtered categorical values with raw and normalized percentages"
+    else:
+        rows = _source_value_rows(table, request)
+        purpose = "source values copied for a planned visual layer"
+
+    artifacts: list[dict[str, Any]] = []
+    for output_name in (request.output_name, *request.aliases):
+        path = execution_dir / output_name
+        _write_csv(path, rows)
+        artifact = _artifact(output_name, path, purpose)
+        artifact.update(_artifact_request_metadata(request))
+        if output_name != request.output_name:
+            artifact["alias_for"] = request.output_name
+            artifact["legacy_alias"] = True
+            artifact["required_for_plotting"] = False
+            artifact["contract_tier"] = "free_design"
+        artifacts.append(artifact)
+    return artifacts, issues
+
+
+def _source_value_rows(table: dict[str, Any], request: ArtifactRequest) -> list[dict[str, Any]]:
+    rows = _sort_rows_by_column(table.get("rows") or [], request.x_column)
+    out_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        out = dict(row)
+        out["x_index"] = index
+        if request.x_column:
+            out["x_value"] = row.get(request.x_column)
+        for series in request.series_columns:
+            out[f"{series}_source"] = row.get(series)
+            out[f"{series}_plot"] = row.get(series)
+        out["artifact_role"] = request.artifact_role
+        out["transform"] = "direct_use_source_values"
+        out_rows.append(out)
+    return out_rows
+
+
+def _waterfall_geometry_rows(table: dict[str, Any], request: ArtifactRequest) -> list[dict[str, Any]]:
+    rows = _sort_rows_by_column(table.get("rows") or [], request.x_column)
+    series_names = list(request.series_columns)
     offsets = _series_offsets(series_names)
     out_rows: list[dict[str, Any]] = []
-    bar_width = 0.32
+    bar_width = min(0.8, 0.72 / max(1, len(series_names)))
     for series in series_names:
         cumulative = 0.0
         series_positions = [index + offsets.get(series, 0.0) for index, _ in enumerate(rows)]
@@ -456,15 +698,13 @@ def _write_imports_waterfall_render_table(execution_dir: Path, table: dict[str, 
                 height = value
                 top = cumulative + value
                 cumulative = top
-            connector_y_start = top if index < max(0, len(rows) - 2) else ""
-            connector_y_end = top if index < max(0, len(rows) - 2) else ""
-            connector_x_start = series_positions[index] + bar_width / 2 if index < max(0, len(rows) - 2) else ""
-            connector_x_end = series_positions[index + 1] - bar_width / 2 if index < max(0, len(rows) - 2) else ""
+            has_connector = index < max(0, len(rows) - 2)
             out_rows.append(
                 {
-                    "Year": row.get("Year"),
+                    request.x_column or "x": row.get(request.x_column) if request.x_column else index,
                     "series": series,
                     "x_index": index,
+                    "x_value": row.get(request.x_column) if request.x_column else index,
                     "x_offset": offsets.get(series, 0.0),
                     "x_position": series_positions[index],
                     "bar_width": bar_width,
@@ -473,94 +713,340 @@ def _write_imports_waterfall_render_table(execution_dir: Path, table: dict[str, 
                     "bar_height": height,
                     "bar_top": top,
                     "role": role,
-                    "color_role": "total" if role == "total" else "increase" if value >= 0 else "decrease",
-                    "connector_x_start": connector_x_start,
-                    "connector_x_end": connector_x_end,
-                    "connector_y_start": connector_y_start,
-                    "connector_y_end": connector_y_end,
-                    "transform": "waterfall_protocol_bar_geometry",
+                    "change_role": "terminal_total" if role == "total" else "increase" if value >= 0 else "decrease",
+                    "color_role": series,
+                    "fill_color_role": series,
+                    "series_color_role": series,
+                    "connector_x_start": series_positions[index] + bar_width / 2 if has_connector else "",
+                    "connector_x_end": series_positions[index + 1] - bar_width / 2 if has_connector else "",
+                    "connector_y_start": top if has_connector else "",
+                    "connector_y_end": top if has_connector else "",
+                    "artifact_role": request.artifact_role,
+                    "transform": "compute_waterfall_geometry",
                 }
             )
-    path = execution_dir / "step_02_imports_waterfall_render_table.csv"
-    _write_csv(path, out_rows)
-    return path, issue
+    return out_rows
 
 
-def _write_consumption_area_values(
-    execution_dir: Path,
-    table: dict[str, Any],
-    *,
-    construction_plan: ChartConstructionPlan,
-) -> tuple[Path, dict[str, Any] | None]:
-    rows = _sort_rows_by_year(table.get("rows") or [])
-    out_rows = []
-    issue = _require_columns(table, {"Year", "Urban", "Rural"}, artifact="step_03_consumption_area_values.csv")
-    modifiers = _area_modifiers(construction_plan)
+def _area_fill_geometry_rows(table: dict[str, Any], request: ArtifactRequest) -> list[dict[str, Any]]:
+    rows = _sort_rows_by_column(table.get("rows") or [], request.x_column)
+    modifiers = request.semantic_modifiers
     composition = str(modifiers.get("composition") or "additive_stack")
     scale_policy = modifiers.get("scale_policy") if isinstance(modifiers.get("scale_policy"), dict) else {}
     axis_min = _number(scale_policy.get("min")) if scale_policy.get("type") == "explicit_range" else 0.0
+    out_rows: list[dict[str, Any]] = []
     for index, row in enumerate(rows):
-        urban = _number(row.get("Urban"))
-        rural = _number(row.get("Rural"))
-        urban_bottom = axis_min if composition == "overlap" else 0.0
-        urban_top = urban
-        rural_bottom = axis_min if composition == "overlap" else urban
-        rural_top = rural if composition == "overlap" else urban + rural
-        out_rows.append(
-            {
-                "x_index": index,
-                "Year": row.get("Year"),
-                "Urban": urban,
-                "Rural": rural,
-                "Urban_area": urban,
-                "Rural_area": rural,
-                "Urban_fill_bottom": urban_bottom,
-                "Urban_fill_top": urban_top,
-                "Rural_fill_bottom": rural_bottom,
-                "Rural_fill_top": rural_top,
-                "Total": urban + rural,
-                "Rural_stack_top": urban + rural,
-                "composition_policy": composition,
-                "opacity_policy": modifiers.get("opacity") or "",
-                "axis_min": scale_policy.get("min") if scale_policy.get("type") == "explicit_range" else "",
-                "axis_max": scale_policy.get("max") if scale_policy.get("type") == "explicit_range" else "",
-                "transform": "modifier_grounded_area_fill_geometry",
-            }
-        )
-    path = execution_dir / "step_03_consumption_area_values.csv"
-    _write_csv(path, out_rows)
-    return path, issue
+        out: dict[str, Any] = dict(row)
+        out["x_index"] = index
+        if request.x_column:
+            out["x_value"] = row.get(request.x_column)
+        cumulative = 0.0
+        total = 0.0
+        for series in request.series_columns:
+            value = _number(row.get(series))
+            total += value
+            if composition == "overlap":
+                bottom = axis_min
+                top = value
+            else:
+                bottom = cumulative
+                top = cumulative + value
+                cumulative = top
+            out[f"{series}_area"] = value
+            out[f"{series}_fill_bottom"] = bottom
+            out[f"{series}_fill_top"] = top
+            out[f"{series}_stack_top"] = top
+        out["Total"] = total
+        out["composition_policy"] = composition
+        out["opacity_policy"] = modifiers.get("opacity") or ""
+        out["axis_min"] = scale_policy.get("min") if scale_policy.get("type") == "explicit_range" else ""
+        out["axis_max"] = scale_policy.get("max") if scale_policy.get("type") == "explicit_range" else ""
+        out["series_columns"] = "|".join(request.series_columns)
+        out["artifact_role"] = request.artifact_role
+        out["transform"] = "compute_area_fill_geometry"
+        out_rows.append(out)
+    return out_rows
 
 
-def _write_pie_values(execution_dir: Path, table: dict[str, Any], *, years: list[int]) -> tuple[Path, dict[str, Any] | None]:
-    rows = [dict(row) for row in table.get("rows") or []]
-    issue = _require_columns(table, {"Year", "Age Group", "Consumption Ratio"}, artifact="step_04_pie_values.csv")
-    wanted = set(years)
-    filtered = [row for row in rows if not wanted or int(_number(row.get("Year"))) in wanted]
-    totals: dict[int, float] = {}
-    for row in filtered:
-        year = int(_number(row.get("Year")))
-        totals[year] = totals.get(year, 0.0) + _number(row.get("Consumption Ratio"))
-    out_rows = []
-    for row in filtered:
-        year = int(_number(row.get("Year")))
-        raw = _number(row.get("Consumption Ratio"))
-        total = totals.get(year, 0.0)
-        out_rows.append(
-            {
-                "Year": year,
-                "Age Group": row.get("Age Group"),
-                "Consumption Ratio": raw,
-                "Consumption Ratio_raw": raw,
-                "Percentage": raw / total * 100 if total else 0.0,
-                "Pie_autopct_percent": raw / total * 100 if total else 0.0,
-                "Explode": 0.1 if "60" in str(row.get("Age Group") or "") or "older" in str(row.get("Age Group") or "").lower() else 0.0,
-                "transform": "filter_year_preserve_raw_and_record_normalized_percent",
-            }
-        )
-    path = execution_dir / "step_04_pie_values.csv"
-    _write_csv(path, out_rows)
-    return path, issue
+def _categorical_value_rows(table: dict[str, Any], request: ArtifactRequest) -> list[dict[str, Any]]:
+    rows = [dict(row) for row in table.get("rows") or [] if isinstance(row, dict)]
+    if request.filter_column and request.filter_values:
+        wanted = {_comparable_value(value) for value in request.filter_values}
+        rows = [row for row in rows if _comparable_value(row.get(request.filter_column)) in wanted]
+    group_column = request.filter_column or "__all__"
+    totals: dict[Any, float] = {}
+    for row in rows:
+        group = _comparable_value(row.get(group_column)) if group_column != "__all__" else "__all__"
+        totals[group] = totals.get(group, 0.0) + _number(row.get(request.value_column))
+    out_rows: list[dict[str, Any]] = []
+    for row in rows:
+        group = _comparable_value(row.get(group_column)) if group_column != "__all__" else "__all__"
+        raw = _number(row.get(request.value_column))
+        total = totals.get(group, 0.0)
+        out = dict(row)
+        out["category"] = row.get(request.category_column)
+        out["raw_value"] = raw
+        if request.value_column:
+            out[f"{request.value_column}_raw"] = raw
+        out["Percentage"] = raw / total * 100 if total else 0.0
+        out["Pie_autopct_percent"] = raw / total * 100 if total else 0.0
+        out["artifact_role"] = request.artifact_role
+        out["transform"] = "filter_rows_and_normalize_percent_by_group"
+        out_rows.append(out)
+    return out_rows
+
+
+def _artifact_request_metadata(request: ArtifactRequest) -> dict[str, Any]:
+    return {
+        "artifact_id": request.artifact_id,
+        "layer_id": request.layer_id,
+        "chart_type": request.chart_type,
+        "artifact_role": request.artifact_role,
+        "source_table": request.source_table,
+        "x_column": request.x_column,
+        "series_columns": list(request.series_columns),
+        "category_column": request.category_column,
+        "value_column": request.value_column,
+        "filter_column": request.filter_column,
+        "filter_values": list(request.filter_values),
+        "transform_ops": list(request.transform_ops),
+        "required_for_plotting": request.required_for_plotting,
+        "contract_tier": request.contract_tier,
+        "contract_reason": _artifact_contract_reason(request),
+        "assertions": list(request.assertions),
+    }
+
+
+def _artifact_contract_reason(request: ArtifactRequest) -> str:
+    if request.contract_tier == "hard_fidelity":
+        if request.artifact_role in {"waterfall_geometry", "area_fill_geometry", "categorical_values"}:
+            return "Deterministic expected artifact required to preserve source-grounded plotted values or geometry."
+        return "Source-grounded evidence artifact; it may support auditing even when not required for plotting."
+    if request.contract_tier == "soft_guidance":
+        return "Non-blocking guidance artifact used for readability or visual feedback."
+    return "Compatibility or executor-owned design-space artifact; not a blocking fidelity contract."
+
+
+def _required_columns_for_request(request: ArtifactRequest) -> set[str]:
+    required = set(request.series_columns)
+    for column in (request.x_column, request.category_column, request.value_column, request.filter_column):
+        if column:
+            required.add(column)
+    return required
+
+
+def _resolve_source_table(layer: dict[str, Any], tables: dict[str, dict[str, Any]]) -> str | None:
+    data_source = str(layer.get("data_source") or "").strip()
+    if data_source in tables:
+        return data_source
+    if data_source:
+        basename = Path(data_source).name
+        if basename in tables:
+            return basename
+    chart_type = str(layer.get("chart_type") or "").lower()
+    role = str(layer.get("role") or "").lower()
+    candidates = list(tables.keys())
+    if not candidates:
+        return None
+    for keyword in _source_keywords_for_layer(chart_type, role):
+        match = _match_table_name(tables, keyword)
+        if match:
+            return match
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _source_keywords_for_layer(chart_type: str, role: str) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for source in (role, chart_type):
+        for token in source.replace("-", "_").split("_"):
+            token = token.strip().lower()
+            if token and token not in tokens and token not in {"chart", "layer", "main", "primary", "values"}:
+                tokens.append(token)
+    return tuple(tokens)
+
+
+def _resolve_x_column(layer: dict[str, Any], columns: list[str]) -> str | None:
+    explicit = _column_if_available(layer.get("x"), columns)
+    if explicit:
+        return explicit
+    encoding = layer.get("encoding") if isinstance(layer.get("encoding"), dict) else {}
+    explicit = _column_if_available(encoding.get("x"), columns)
+    if explicit:
+        return explicit
+    for preferred in ("Year", "Date", "Time", "Month", "Category"):
+        match = _column_if_available(preferred, columns)
+        if match:
+            return match
+    return columns[0] if columns else None
+
+
+def _resolve_series_columns(layer: dict[str, Any], table: dict[str, Any], *, x_column: str | None) -> list[str]:
+    columns = [str(item) for item in list(table.get("columns") or [])]
+    explicit: list[str] = []
+    for item in list(layer.get("y") or []):
+        match = _column_if_available(item, columns)
+        if match and match not in explicit:
+            explicit.append(match)
+    encoding = layer.get("encoding") if isinstance(layer.get("encoding"), dict) else {}
+    for key in ("y", "value", "values", "measure"):
+        value = encoding.get(key)
+        if isinstance(value, (list, tuple)):
+            values = value
+        else:
+            values = [value]
+        for item in values:
+            match = _column_if_available(item, columns)
+            if match and match not in explicit:
+                explicit.append(match)
+    series = encoding.get("series")
+    if isinstance(series, (list, tuple)):
+        for item in series:
+            match = _column_if_available(item, columns)
+            if match and match not in explicit:
+                explicit.append(match)
+    if explicit:
+        return explicit
+    return _numeric_measure_columns(table, exclude={x_column})
+
+
+def _resolve_category_column(layer: dict[str, Any], table: dict[str, Any]) -> str | None:
+    columns = [str(item) for item in list(table.get("columns") or [])]
+    encoding = layer.get("encoding") if isinstance(layer.get("encoding"), dict) else {}
+    for value in (layer.get("x"), encoding.get("labels"), encoding.get("category"), encoding.get("x")):
+        match = _column_if_available(value, columns)
+        if match:
+            return match
+    text_columns = _text_columns(table)
+    return text_columns[0] if text_columns else (columns[0] if columns else None)
+
+
+def _resolve_value_column(layer: dict[str, Any], table: dict[str, Any], *, exclude: set[str | None]) -> str | None:
+    columns = [str(item) for item in list(table.get("columns") or [])]
+    encoding = layer.get("encoding") if isinstance(layer.get("encoding"), dict) else {}
+    for value in (*list(layer.get("y") or []), encoding.get("values"), encoding.get("value"), encoding.get("measure")):
+        match = _column_if_available(value, columns)
+        if match and match not in exclude:
+            return match
+    measures = _numeric_measure_columns(table, exclude=exclude)
+    return measures[0] if measures else None
+
+
+def _resolve_filter(layer: dict[str, Any], panel: dict[str, Any], columns: list[str]) -> tuple[str | None, tuple[Any, ...]]:
+    encoding = layer.get("encoding") if isinstance(layer.get("encoding"), dict) else {}
+    filter_spec = encoding.get("filter") if isinstance(encoding.get("filter"), dict) else {}
+    if filter_spec:
+        column = next(iter(filter_spec.keys()))
+        match = _column_if_available(column, columns)
+        if match:
+            value = filter_spec.get(column)
+            values = tuple(value) if isinstance(value, (list, tuple, set)) else (value,)
+            return match, values
+    anchor = panel.get("anchor") if isinstance(panel.get("anchor"), dict) else {}
+    if anchor.get("value") is not None:
+        for preferred in ("Year", "Date", "Time", "Month"):
+            match = _column_if_available(preferred, columns)
+            if match:
+                return match, (anchor.get("value"),)
+    return None, ()
+
+
+def _numeric_measure_columns(table: dict[str, Any], *, exclude: set[str | None]) -> list[str]:
+    columns = [str(item) for item in list(table.get("columns") or [])]
+    excluded = {str(item) for item in exclude if item}
+    rows = [dict(row) for row in list(table.get("rows") or []) if isinstance(row, dict)]
+    result: list[str] = []
+    for column in columns:
+        if column in excluded:
+            continue
+        if _looks_numeric_column(rows, column):
+            result.append(column)
+    return result
+
+
+def _text_columns(table: dict[str, Any]) -> list[str]:
+    columns = [str(item) for item in list(table.get("columns") or [])]
+    rows = [dict(row) for row in list(table.get("rows") or []) if isinstance(row, dict)]
+    result = []
+    for column in columns:
+        if not _looks_numeric_column(rows, column):
+            result.append(column)
+    return result
+
+
+def _looks_numeric_column(rows: list[dict[str, Any]], column: str) -> bool:
+    values = [row.get(column) for row in rows[:12] if row.get(column) not in (None, "")]
+    if not values:
+        return False
+    numeric = 0
+    for value in values:
+        try:
+            float(value)
+            numeric += 1
+        except (TypeError, ValueError):
+            pass
+    return numeric == len(values)
+
+
+def _column_if_available(value: Any, columns: list[str]) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text in columns:
+        return text
+    lowered = text.lower()
+    for column in columns:
+        if column.lower() == lowered:
+            return column
+    return None
+
+
+def _request_base(layer_id: str, chart_type: str) -> str:
+    safe_layer = _safe_filename(layer_id.replace("layer.", ""))
+    safe_type = _safe_filename(chart_type)
+    if safe_type and safe_type not in safe_layer:
+        return f"artifact_{safe_layer}_{safe_type}"
+    return f"artifact_{safe_layer}"
+
+
+def _legacy_aliases(chart_type: str, artifact_role: str, layer: dict[str, Any]) -> tuple[str, ...]:
+    """Temporary compatibility aliases for older tests/runners; not used as the canonical contract."""
+
+    layer_id = str(layer.get("layer_id") or "")
+    if chart_type == "waterfall" and artifact_role == "source_values" and layer_id == "layer.import_waterfall":
+        return ("step_02_imports_waterfall_values.csv",)
+    if chart_type == "waterfall" and artifact_role == "waterfall_geometry" and layer_id == "layer.import_waterfall":
+        return ("step_02_imports_waterfall_render_table.csv",)
+    if chart_type == "area" and artifact_role == "area_fill_geometry" and layer_id == "layer.consumption_area":
+        return ("step_03_consumption_area_values.csv",)
+    if chart_type == "pie" and artifact_role == "categorical_values":
+        return ("step_04_pie_values.csv",)
+    return ()
+
+
+def _sort_rows_by_column(rows: list[Any], column: str | None) -> list[dict[str, Any]]:
+    normalized = [dict(row) for row in rows if isinstance(row, dict)]
+    if not column:
+        return normalized
+    return sorted(normalized, key=lambda row: (_sort_key(row.get(column)), str(row.get(column))))
+
+
+def _sort_key(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _comparable_value(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+        return int(number) if number.is_integer() else number
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _source_summary_payload(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -669,12 +1155,30 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _artifact(name: str, path: Path, purpose: str) -> dict[str, Any]:
-    return {
+    artifact = {
         "name": name,
         "path": str(path),
         "relative_path": _workspace_relative_path(path),
         "purpose": purpose,
     }
+    schema = _artifact_schema(path)
+    if schema:
+        artifact["schema"] = schema
+        artifact["columns"] = list(schema.get("columns") or [])
+    return artifact
+
+
+def _artifact_schema(path: Path) -> dict[str, Any]:
+    if path.suffix.lower() != ".csv" or not path.exists() or not path.is_file():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            columns = [str(item) for item in list(reader.fieldnames or [])]
+            row_count = sum(1 for _ in reader)
+        return {"columns": columns, "row_count": row_count}
+    except OSError:
+        return {}
 
 
 def _workspace_relative_path(path: Path) -> str:

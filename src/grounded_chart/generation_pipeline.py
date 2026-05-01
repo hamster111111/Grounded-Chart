@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from grounded_chart.artifact_workspace import ArtifactWorkspaceBuilder
+from grounded_chart.chart_protocol import ChartProtocolAgent
 from grounded_chart.codegen import ChartCodeGeneration, ChartCodeGenerationRequest, ChartCodeGenerator
 from grounded_chart.construction_plan import HeuristicChartConstructionPlanner, PlanDecision, validate_construction_plan
 from grounded_chart.evidence import build_requirement_plan
@@ -104,6 +105,7 @@ class ChartGenerationPipeline:
         layout_critic: LayoutCriticAgent | None = None,
         figure_reader: FigureReaderAgent | None = None,
         plan_agent: ChartPlanAgent | None = None,
+        protocol_agent: ChartProtocolAgent | None = None,
         plan_reviser: Any | None = None,
         enable_layout_replanning: bool = False,
         layout_replan_rounds: int = 1,
@@ -115,6 +117,7 @@ class ChartGenerationPipeline:
         self.layout_critic = layout_critic
         self.figure_reader = figure_reader
         self.plan_agent = plan_agent or HeuristicPlanAgent(HeuristicChartConstructionPlanner())
+        self.protocol_agent = protocol_agent
         self.plan_reviser = plan_reviser
         self.enable_layout_replanning = enable_layout_replanning
         self.layout_replan_rounds = layout_replan_rounds
@@ -180,7 +183,7 @@ class ChartGenerationPipeline:
             query=query,
             source_data_plan=source_plan,
         )
-        artifact_workspace_report = ArtifactWorkspaceBuilder().build(
+        artifact_workspace_report = ArtifactWorkspaceBuilder(protocol_agent=self.protocol_agent).build(
             output_root=output_root,
             case_id=case_id,
             query=query,
@@ -740,7 +743,7 @@ class ChartGenerationPipeline:
                 query=query,
                 source_data_plan=source_plan,
             )
-            revised_artifact_report = ArtifactWorkspaceBuilder().build(
+            revised_artifact_report = ArtifactWorkspaceBuilder(protocol_agent=self.protocol_agent).build(
                 output_root=output_root,
                 case_id=case_id,
                 query=query,

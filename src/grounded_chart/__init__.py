@@ -105,6 +105,7 @@ from grounded_chart.codegen import (
     LLMChartCodeGenerator,
     StaticChartCodeGenerator,
 )
+from grounded_chart.chart_protocol import ChartProtocolAgent, ChartRenderingProtocol, ProtocolValidationReport, validate_protocol
 from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
 from grounded_chart.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
 from grounded_chart.figure_reader import (
@@ -160,6 +161,8 @@ __all__ = [
     "ChartRenderResult",
     "ChartRequirementPlan",
     "ChartPlanAgent",
+    "ChartProtocolAgent",
+    "ChartRenderingProtocol",
     "LayoutCriticAgent",
     "LayoutCritique",
     "LayoutOnlyPlanRevisionAgent",
@@ -228,6 +231,7 @@ __all__ = [
     "PlanRevisionResult",
     "PlanValidationIssue",
     "PlanValidationReport",
+    "ProtocolValidationReport",
     "PlanValidator",
     "PlotTrace",
     "PLOTLY_PROFILE",
@@ -254,6 +258,7 @@ __all__ = [
     "VerificationReport",
     "validate_executor_fidelity",
     "validate_construction_plan",
+    "validate_protocol",
     "VisualLayerPlan",
     "VisualPanelPlan",
     "verify_expected_visual_artifacts",
