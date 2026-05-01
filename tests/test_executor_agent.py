@@ -266,8 +266,8 @@ area = pd.read_csv(os.path.join(execution_dir, 'step_03_consumption_area_values.
 pies = pd.read_csv(os.path.join(execution_dir, 'step_04_pie_values.csv'))
 fig, ax = plt.subplots()
 for _, row in imports.iterrows():
-    colors = {'increase': 'green', 'decrease': 'red', 'total': 'blue'}
-    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['color_role']])
+    colors = {'Urban': 'green', 'Rural': 'blue'}
+    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['fill_color_role']])
 ax2 = ax.twinx()
 ax2.fill_between(area['x_index'], area['Urban_fill_bottom'], area['Urban_fill_top'], alpha=0.35)
 ax2.fill_between(area['x_index'], area['Rural_fill_bottom'], area['Rural_fill_top'], alpha=0.35)
@@ -313,8 +313,8 @@ area = pd.read_csv(os.path.join(execution_dir, 'step_03_consumption_area_values.
 pies = pd.read_csv(os.path.join(execution_dir, 'step_04_pie_values.csv'))
 fig, ax = plt.subplots()
 for _, row in imports.iterrows():
-    colors = {'increase': 'green', 'decrease': 'red', 'total': 'blue'}
-    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['color_role']])
+    colors = {'Urban': 'green', 'Rural': 'blue'}
+    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['fill_color_role']])
 ax2 = ax.twinx()
 ax2.fill_between(area['x_index'], area['Urban_fill_bottom'], area['Urban_fill_top'], alpha=0.35)
 ax2.fill_between(area['x_index'], area['Rural_fill_bottom'], area['Rural_fill_top'], alpha=0.35)
@@ -394,7 +394,7 @@ fig.savefig(OUTPUT_PATH)
         self.assertTrue(report.ok, [issue.to_dict() for issue in report.issues])
         self.assertNotIn("waterfall_render_protocol_not_used", codes)
 
-    def test_validator_rejects_waterfall_color_role_enum_mismatch(self) -> None:
+    def test_validator_warns_on_legacy_waterfall_change_color_mapping(self) -> None:
         context = {
             **CONTEXT,
             "artifact_workspace": {
@@ -433,8 +433,166 @@ fig.savefig(OUTPUT_PATH)
         report = validate_executor_fidelity(code, context=context)
         codes = {issue.code for issue in report.issues}
 
-        self.assertFalse(report.ok)
-        self.assertIn("waterfall_color_role_enum_mismatch", codes)
+        self.assertTrue(report.ok)
+        self.assertIn("waterfall_visual_channel_policy_bypass", codes)
+
+    def test_warns_when_hard_visual_channel_contract_mapping_is_not_recorded(self) -> None:
+        context = {
+            "artifact_workspace": {
+                "artifacts": [
+                    {
+                        "name": "artifact_waterfall_geometry.csv",
+                        "relative_path": "execution/round_1/artifact_waterfall_geometry.csv",
+                        "artifact_role": "waterfall_geometry",
+                        "chart_type": "waterfall",
+                        "schema": {"columns": ["x_position", "bar_height", "bar_bottom", "bar_width", "fill_color_role"]},
+                    }
+                ],
+                "metadata": {
+                    "chart_protocols": [
+                        {
+                            "chart_type": "waterfall",
+                            "visual_channel_contracts": [
+                                {
+                                    "layer_id": "layer.waterfall",
+                                    "channel": "fill_color",
+                                    "semantic_dimension": "series_identity",
+                                    "field": "fill_color_role",
+                                    "strength": "hard",
+                                    "executor_freedom": "choose_palette",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+        }
+        code = """
+import pandas as pd
+import matplotlib.pyplot as plt
+df = pd.read_csv('execution/round_1/artifact_waterfall_geometry.csv')
+fig, ax = plt.subplots()
+colors = {'A': 'blue', 'B': 'orange'}
+for _, row in df.iterrows():
+    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['fill_color_role']])
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=context)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertTrue(report.ok)
+        self.assertIn("missing_visual_channel_decisions_record", codes)
+
+    def test_accepts_recorded_hard_visual_channel_contract_mapping(self) -> None:
+        context = {
+            "artifact_workspace": {
+                "artifacts": [
+                    {
+                        "name": "artifact_waterfall_geometry.csv",
+                        "relative_path": "execution/round_1/artifact_waterfall_geometry.csv",
+                        "artifact_role": "waterfall_geometry",
+                        "chart_type": "waterfall",
+                        "schema": {"columns": ["x_position", "bar_height", "bar_bottom", "bar_width", "fill_color_role"]},
+                    }
+                ],
+                "metadata": {
+                    "chart_protocols": [
+                        {
+                            "chart_type": "waterfall",
+                            "visual_channel_contracts": [
+                                {
+                                    "layer_id": "layer.waterfall",
+                                    "channel": "fill_color",
+                                    "semantic_dimension": "series_identity",
+                                    "field": "fill_color_role",
+                                    "strength": "hard",
+                                    "executor_freedom": "choose_palette",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+        }
+        code = """
+import json
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+df = pd.read_csv('execution/round_1/artifact_waterfall_geometry.csv')
+fig, ax = plt.subplots()
+colors = {'A': 'blue', 'B': 'orange'}
+for _, row in df.iterrows():
+    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=colors[row['fill_color_role']])
+Path(OUTPUT_PATH).with_name('visual_channel_decisions.json').write_text(json.dumps({'layer.waterfall.fill_color': {'field': 'fill_color_role', 'mapping': colors}}))
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=context)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertTrue(report.ok)
+        self.assertNotIn("missing_visual_channel_decisions_record", codes)
+
+    def test_soft_artifact_contract_does_not_force_prepared_artifact_read(self) -> None:
+        context = {
+            "artifact_workspace": {
+                "artifacts": [
+                    {
+                        "name": "readability_hint.csv",
+                        "relative_path": "execution/round_1/readability_hint.csv",
+                        "artifact_role": "layout_hint",
+                        "chart_type": "bar",
+                        "required_for_plotting": True,
+                        "contract_tier": "soft_guidance",
+                    }
+                ],
+            },
+        }
+        code = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.bar([1], [2])
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=context)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertTrue(report.ok)
+        self.assertNotIn("prepared_artifact_not_read", codes)
+
+    def test_soft_visual_channel_contract_does_not_require_decision_record(self) -> None:
+        context = {
+            "artifact_workspace": {
+                "metadata": {
+                    "chart_protocols": [
+                        {
+                            "chart_type": "bar",
+                            "visual_channel_contracts": [
+                                {
+                                    "layer_id": "layer.bar",
+                                    "channel": "fill_color",
+                                    "semantic_dimension": "readability",
+                                    "field": "category",
+                                    "strength": "soft",
+                                    "contract_tier": "soft_guidance",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+        }
+        code = """
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.bar([1], [2], color='steelblue')
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=context)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertTrue(report.ok)
+        self.assertNotIn("missing_visual_channel_decisions_record", codes)
 
     def test_warns_when_executor_computed_layout_is_not_recorded(self) -> None:
         context = {

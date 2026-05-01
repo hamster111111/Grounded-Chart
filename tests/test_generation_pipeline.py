@@ -339,6 +339,14 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "step_01_sources_summary.json").exists())
             self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "chart_protocols" / "waterfall_protocol.json").exists())
             self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "step_02_imports_waterfall_render_table.csv").exists())
+            artifact_workspace = json.loads((Path(output_tmp) / "artifact_workspace_manifest.json").read_text(encoding="utf-8"))
+            render_artifact = next(
+                item
+                for item in artifact_workspace["artifacts"]
+                if item["name"] == "step_02_imports_waterfall_render_table.csv"
+            )
+            self.assertIn("schema", render_artifact)
+            self.assertIn("fill_color_role", render_artifact["schema"]["columns"])
             self.assertTrue(manifest["metadata"]["executor_fidelity_ok"])
             self.assertTrue((Path(output_tmp) / "executor_fidelity_report.json").exists())
 
@@ -401,6 +409,77 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertEqual("20.0", rural_2001["bar_bottom"])
             self.assertEqual("-2.0", rural_2001["bar_height"])
             self.assertEqual("18.0", rural_2001["bar_top"])
+            self.assertEqual("increase", urban_2001["change_role"])
+            self.assertEqual("Urban", urban_2001["fill_color_role"])
+            self.assertEqual("Rural", rural_2001["fill_color_role"])
+
+    def test_artifact_compiler_uses_layer_schema_not_fixed_import_columns(self):
+        class CapturingGenerator:
+            def __init__(self):
+                self.request = None
+
+            def generate(self, request):
+                self.request = request
+                artifacts = request.context["artifact_workspace"]["artifacts"]
+                geometry = next(
+                    item
+                    for item in artifacts
+                    if item.get("artifact_role") == "waterfall_geometry"
+                    and item.get("chart_type") == "waterfall"
+                    and not item.get("legacy_alias")
+                )
+                code = f"""
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv({geometry["relative_path"]!r})
+fig, ax = plt.subplots(figsize=(4, 3))
+ax.bar(df['x_position'], df['bar_height'], bottom=df['bar_bottom'], width=df['bar_width'])
+ax.set_title('Trade')
+fig.savefig(OUTPUT_PATH, bbox_inches='tight')
+""".strip()
+                return ChartCodeGeneration(code=code, generator_name="capture")
+
+        generator = CapturingGenerator()
+        pipeline = ChartGenerationPipeline(
+            code_generator=generator,
+            verifier_pipeline=GroundedChartPipeline(parser=HeuristicIntentParser()),
+        )
+
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as output_tmp:
+            source_root = Path(source_tmp)
+            (source_root / "TradeFlow.csv").write_text(
+                "Year,City,Suburb\n2020,5,7\n2021,-2,3\n2022,9,11\n",
+                encoding="utf-8",
+            )
+            result = pipeline.run(
+                query="Use TradeFlow.csv to create a waterfall chart of City and Suburb values over Year.",
+                schema=TableSchema(columns={}),
+                rows=(),
+                output_dir=Path(output_tmp),
+                case_id="generic_waterfall_schema",
+                source_workspace=source_root,
+                verification_mode="figure_only",
+            )
+
+            self.assertTrue(result.render_result.ok)
+            workspace = json.loads((Path(output_tmp) / "artifact_workspace_manifest.json").read_text(encoding="utf-8"))
+            geometry = next(
+                item
+                for item in workspace["artifacts"]
+                if item.get("artifact_role") == "waterfall_geometry" and not item.get("legacy_alias")
+            )
+            self.assertEqual("TradeFlow.csv", geometry["source_table"])
+            self.assertEqual(["City", "Suburb"], geometry["series_columns"])
+            with (Path(output_tmp) / geometry["relative_path"]).open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            city_2021 = next(row for row in rows if row["Year"] == "2021" and row["series"] == "City")
+            suburb_2021 = next(row for row in rows if row["Year"] == "2021" and row["series"] == "Suburb")
+            self.assertEqual("-2.0", city_2021["bar_height"])
+            self.assertEqual("City", city_2021["fill_color_role"])
+            self.assertEqual("Suburb", suburb_2021["fill_color_role"])
+            self.assertNotIn("Urban", geometry["schema"]["columns"])
+            self.assertTrue(json.loads((Path(output_tmp) / "executor_fidelity_report.json").read_text(encoding="utf-8"))["ok"])
 
     def test_generation_pipeline_preserves_area_overlap_modifier_from_instruction_evidence(self):
         class CapturingGenerator:

@@ -4,6 +4,7 @@ from pathlib import Path
 from grounded_chart import (
     AblationRunConfig,
     ChartGenerationPipeline,
+    ChartProtocolAgent,
     GroundedChartPipeline,
     HeuristicIntentParser,
     LLMChartCodeGenerator,
@@ -48,6 +49,7 @@ def main() -> None:
     generation_pipeline = ChartGenerationPipeline(
         code_generator=build_code_generator(config, use_llm=args.llm_codegen, max_tokens=args.max_tokens),
         verifier_pipeline=verifier_pipeline,
+        protocol_agent=build_protocol_agent(config, enabled=args.llm_protocol_agent),
     )
 
     result = generation_pipeline.run(
@@ -77,6 +79,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run GroundedChart instruction-to-image generation smoke pipeline.")
     parser.add_argument("--config", help="YAML/TOML LLM config path relative to project root or absolute path.")
     parser.add_argument("--llm-codegen", action="store_true", help="Use configured LLM provider for code generation.")
+    parser.add_argument("--llm-protocol-agent", action="store_true", help="Use configured LLM provider for case-specific chart protocols.")
     parser.add_argument("--max-tokens", type=int, default=None, help="Override codegen max_tokens for this run.")
     parser.add_argument("--output-dir", help="Directory for generated code, image, manifest, and report.")
     parser.add_argument("--case-id", default="generation_smoke")
@@ -123,6 +126,13 @@ def build_code_generator(config: AblationRunConfig, *, use_llm: bool, max_tokens
         OpenAICompatibleLLMClient(require_provider(provider, role="codegen")),
         max_tokens=max_tokens,
     )
+
+
+def build_protocol_agent(config: AblationRunConfig, *, enabled: bool):
+    if not enabled:
+        return None
+    provider = config.plan_provider or config.codegen_provider or config.parser_provider or config.repair_provider
+    return ChartProtocolAgent(OpenAICompatibleLLMClient(require_provider(provider, role="protocol agent")))
 
 
 def require_provider(provider, *, role: str):

@@ -10,6 +10,7 @@ from typing import Any
 from grounded_chart import (
     AblationRunConfig,
     ChartGenerationPipeline,
+    ChartProtocolAgent,
     GroundedChartPipeline,
     HeuristicIntentParser,
     LLMChartCodeGenerator,
@@ -77,6 +78,11 @@ def main() -> None:
             enabled=args.llm_plan_agent,
             max_tokens=args.plan_agent_max_tokens,
         ),
+        protocol_agent=build_protocol_agent(
+            config,
+            enabled=args.llm_protocol_agent,
+            max_tokens=args.protocol_agent_max_tokens,
+        ),
         enable_layout_replanning=args.enable_layout_replanning,
         layout_replan_rounds=args.layout_replan_rounds,
         layout_replan_acceptance=args.layout_replan_acceptance,
@@ -143,8 +149,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", help="YAML/TOML LLM config path, absolute or relative to project root.")
     parser.add_argument("--llm-codegen", action="store_true", help="Use configured LLM for instruction-to-code generation.")
     parser.add_argument("--llm-plan-agent", action="store_true", help="Use configured LLM PlanAgent for construction planning and replanning.")
+    parser.add_argument("--llm-protocol-agent", action="store_true", help="Use configured LLM ChartProtocolAgent for case-specific chart rendering protocols.")
     parser.add_argument("--max-tokens", type=int, default=None, help="Override codegen max_tokens.")
     parser.add_argument("--plan-agent-max-tokens", type=int, default=8192, help="Max tokens for LLM PlanAgent.")
+    parser.add_argument("--protocol-agent-max-tokens", type=int, default=2200, help="Max tokens for LLM ChartProtocolAgent.")
     parser.add_argument("--output-dir", help="Output directory, absolute or relative to project root.")
     parser.add_argument("--test-name", help="Convenience output name under outputs/, e.g. test_01.")
     parser.add_argument("--clean-output", action="store_true", help="Delete the selected output directory before running.")
@@ -220,6 +228,16 @@ def build_plan_agent(config: AblationRunConfig, *, enabled: bool, max_tokens: in
     )
 
 
+def build_protocol_agent(config: AblationRunConfig, *, enabled: bool, max_tokens: int | None):
+    if not enabled:
+        return None
+    provider = config.plan_provider or config.codegen_provider or config.parser_provider or config.repair_provider
+    return ChartProtocolAgent(
+        OpenAICompatibleLLMClient(require_provider(provider, role="protocol agent")),
+        max_tokens=max_tokens,
+    )
+
+
 def build_layout_critic(config: AblationRunConfig, *, enabled: bool, backend: str, max_tokens: int | None):
     if not enabled:
         return None
@@ -259,7 +277,7 @@ def case_summary(case, *, result, error: BaseException | None, case_dir: Path | 
     if result is None:
         return {
             "case_id": case.case_id,
-            "generation_mode": case.generation_mode,
+            "generation_mode": _effective_case_generation_mode(case),
             "query": case.query,
             "output_dir": str(case_dir) if case_dir else None,
             "ok": False,
@@ -271,7 +289,7 @@ def case_summary(case, *, result, error: BaseException | None, case_dir: Path | 
         }
     return {
         "case_id": case.case_id,
-        "generation_mode": result.metadata.get("generation_mode", case.generation_mode),
+        "generation_mode": result.metadata.get("generation_mode", _effective_case_generation_mode(case)),
         "query": case.query,
         "output_dir": str(result.output_dir),
         "image_path": str(result.image_path) if result.image_path else None,
@@ -302,6 +320,12 @@ def case_summary(case, *, result, error: BaseException | None, case_dir: Path | 
         "render_exception_message": result.render_result.exception_message,
         "metadata": case.generation_context(),
     }
+
+
+def _effective_case_generation_mode(case) -> str:
+    if getattr(case, "data_dir", None):
+        return "source_file_grounded"
+    return case.generation_mode
 
 
 def build_summary(*, manifest_path: Path, output_dir: Path, config_path: Path | None, llm_codegen: bool, cases: list[dict[str, Any]]) -> dict[str, Any]:

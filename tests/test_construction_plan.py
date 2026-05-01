@@ -52,11 +52,11 @@ class ConstructionPlanTest(unittest.TestCase):
         waterfall = next(layer for layer in main.layers if layer.role == "yearly_change_bars")
         self.assertIn("connector_lines", {item["type"] for item in waterfall.components})
         channel_plan = waterfall.visual_channel_plan
-        self.assertEqual("multi_semantic_waterfall_encoding_v1", channel_plan["channel_contract"])
+        self.assertEqual("case_specific_waterfall_encoding_v2", channel_plan["channel_contract"])
         self.assertEqual("series", channel_plan["dimensions"]["series_identity"]["field"])
-        self.assertEqual("color_role", channel_plan["dimensions"]["change_role"]["field"])
+        self.assertEqual("change_role", channel_plan["dimensions"]["change_direction"]["field"])
         self.assertEqual("series", channel_plan["channel_allocation"]["x_group_offset"]["field"])
-        self.assertEqual("color_role", channel_plan["channel_allocation"]["fill_color"]["field"])
+        self.assertEqual("series", channel_plan["channel_allocation"]["fill_color"]["field"])
         self.assertTrue(channel_plan["legend_policy"]["avoid_flattening_dimensions"])
         pie_panels = [panel for panel in plan.panels if panel.role == "inset_pie_chart"]
         self.assertTrue(all(panel.anchor.get("type") == "x_value" for panel in pie_panels))

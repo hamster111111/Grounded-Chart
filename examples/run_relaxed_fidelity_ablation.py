@@ -1566,13 +1566,16 @@ def infer_table_schema_type(columns: list[str]) -> str:
 def schema_usage_constraints(*, name: str, columns: list[str]) -> list[str]:
     constraints = [f"{name}: exact columns are {columns}."]
     normalized = {column.strip().lower() for column in columns}
-    if "year" in normalized and {"urban", "rural"}.issubset(normalized):
+    if "year" in normalized and len(columns) >= 3:
+        measure_columns = [column for column in columns if column.strip().lower() != "year"]
         constraints.append(
-            f"{name}: this is wide data; access Urban/Rural directly or melt before using Category/Value."
+            f"{name}: this is wide time data; access measure columns {measure_columns} directly or melt before using Category/Value."
         )
         constraints.append(f"{name}: do not call pivot(... columns='Category', values='Value') before creating those columns.")
-    if "age group" in normalized and "consumption ratio" in normalized:
-        constraints.append(f"{name}: preserve Age Group and Consumption Ratio semantics when renaming.")
+    category_like = [column for column in columns if any(token in column.strip().lower() for token in ("category", "group", "label", "type", "segment"))]
+    value_like = [column for column in columns if any(token in column.strip().lower() for token in ("ratio", "rate", "percent", "share", "value"))]
+    if category_like and value_like:
+        constraints.append(f"{name}: preserve category columns {category_like} and value/ratio columns {value_like} semantics when renaming.")
     return constraints
 
 

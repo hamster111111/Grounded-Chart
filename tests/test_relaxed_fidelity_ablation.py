@@ -255,7 +255,7 @@ class RelaxedFidelityAblationHelpersTest(unittest.TestCase):
 
         self.assertEqual("wide_year_measure_table", constraints["files"][0]["schema_type"])
         self.assertTrue(
-            any("melt before Category/Value logic" in item for item in constraints["files"][0]["usage_constraints"])
+            any("melt before long-form Category/Value logic" in item for item in constraints["files"][0]["usage_constraints"])
         )
 
     def test_fidelity_payload_includes_source_evidence_but_vanilla_does_not(self) -> None:
