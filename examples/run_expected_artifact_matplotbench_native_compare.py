@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -205,7 +205,7 @@ def _selection_item(raw: dict[str, Any], *, case_id: str, rank: int, reason: str
 
 def _case_source_text(raw: dict[str, Any]) -> str:
     parts = []
-    for key in ("expert_instruction", "simple_instruction", "instruction", "query"):
+    for key in ("query", "simple_instruction", "instruction", "expert_instruction"):
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
             parts.append(value.strip())

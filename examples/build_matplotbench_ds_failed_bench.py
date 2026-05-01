@@ -50,7 +50,8 @@ def main() -> None:
                 "eval_raw": detail.get("raw"),
                 "simple_instruction": instruction["simple_instruction"],
                 "expert_instruction": instruction["expert_instruction"],
-                "query": instruction["expert_instruction"],
+                "query": instruction["simple_instruction"],
+                "query_source": "simple_instruction",
                 "schema": {"columns": {}},
                 "workspace_dir": str(workspace_dir),
                 "selected_code_path": str(selected_code_path) if selected_code_path else None,
@@ -63,6 +64,8 @@ def main() -> None:
                     "source_eval_results_path": str(eval_results_path),
                     "source_workspace_root": str(workspace_root),
                     "eval_summary": eval_results.get("summary", {}),
+                    "query_source": "simple_instruction",
+                    "expert_instruction_role": "metadata_only",
                 },
             }
         )
@@ -113,3 +116,4 @@ def code_rank(path: Path) -> tuple[int, int, str]:
 
 if __name__ == "__main__":
     main()
+

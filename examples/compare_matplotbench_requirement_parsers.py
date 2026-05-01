@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
 def rebuild_llm_report(raw_cases: list[dict[str, Any]]) -> RequirementExtractionReport:
     case_reports = []
     for case in raw_cases:
-        query = str(case.get("expert_instruction") or case.get("simple_instruction") or case.get("query") or "")
+        query = str(case.get("query") or case.get("simple_instruction") or case.get("expert_instruction") or "")
         payload = case.get("raw_response") or {}
         bundle = _build_llm_requirement_bundle(query, TableSchema(columns={}), payload, default_confidence=0.7)
         requirement_plan = requirement_plan_to_dict(bundle.requirement_plan)

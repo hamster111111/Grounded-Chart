@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,12 +13,16 @@ from grounded_chart import (
     GroundedChartPipeline,
     HeuristicIntentParser,
     LLMChartCodeGenerator,
+    LLMLayoutCriticAgent,
     LLMIntentParser,
+    LLMPlanAgent,
     LLMRepairer,
     OpenAICompatibleLLMClient,
     RuleBasedRepairer,
     StaticChartCodeGenerator,
     TieredRepairer,
+    VLMFigureReaderAgent,
+    VLMLayoutAgent,
     load_ablation_run_config,
 )
 from grounded_chart_adapters import MatplotBenchGenerationAdapter
@@ -36,7 +41,9 @@ def main() -> None:
     args = parse_args()
     project_root = Path(__file__).resolve().parents[1]
     manifest_path = _resolve_path(args.manifest, project_root)
-    output_dir = _resolve_path(args.output_dir, project_root) if args.output_dir else project_root / "outputs" / "matplotbench_generation_pipeline"
+    output_dir = _resolve_output_dir(args, project_root)
+    if args.clean_output and output_dir.exists():
+        _safe_clean_output_dir(output_dir, project_root)
     config = load_ablation_run_config(_resolve_path(args.config, project_root)) if args.config else AblationRunConfig()
 
     adapter = MatplotBenchGenerationAdapter(
@@ -54,6 +61,25 @@ def main() -> None:
     generation_pipeline = ChartGenerationPipeline(
         code_generator=build_code_generator(config, use_llm=args.llm_codegen, max_tokens=args.max_tokens),
         verifier_pipeline=verifier_pipeline,
+        layout_critic=build_layout_critic(
+            config,
+            enabled=args.enable_layout_replanning,
+            backend=args.layout_agent_backend,
+            max_tokens=args.layout_critic_max_tokens,
+        ),
+        figure_reader=build_figure_reader(
+            config,
+            enabled=args.enable_figure_reader,
+            max_tokens=args.figure_reader_max_tokens,
+        ),
+        plan_agent=build_plan_agent(
+            config,
+            enabled=args.llm_plan_agent,
+            max_tokens=args.plan_agent_max_tokens,
+        ),
+        enable_layout_replanning=args.enable_layout_replanning,
+        layout_replan_rounds=args.layout_replan_rounds,
+        layout_replan_acceptance=args.layout_replan_acceptance,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -70,9 +96,25 @@ def main() -> None:
                 verification_mode=args.verification_mode,
                 generation_mode=case.generation_mode,
                 generation_context=case.generation_context(),
+                source_workspace=case.data_dir,
+                enable_layout_replanning=args.enable_layout_replanning,
+                layout_replan_rounds=args.layout_replan_rounds,
+                layout_replan_acceptance=args.layout_replan_acceptance,
             )
             case_summaries.append(case_summary(case, result=result, error=None))
-            print(case.case_id, "render_ok=", result.render_result.ok, "verify_ok=", result.pipeline_result.report.ok, "image=", result.image_path)
+            print(
+                case.case_id,
+                "render_ok=",
+                result.render_result.ok,
+                "executor_fidelity_ok=",
+                result.metadata.get("executor_fidelity_ok"),
+                "verify_ok=",
+                result.pipeline_result.report.ok,
+                "layout_replan=",
+                result.metadata.get("layout_replanning_accepted"),
+                "image=",
+                result.image_path,
+            )
         except Exception as exc:
             case_summaries.append(case_summary(case, result=None, error=exc, case_dir=case_dir))
             print(case.case_id, "ERROR", type(exc).__name__, str(exc))
@@ -100,11 +142,32 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", help="YAML/TOML LLM config path, absolute or relative to project root.")
     parser.add_argument("--llm-codegen", action="store_true", help="Use configured LLM for instruction-to-code generation.")
+    parser.add_argument("--llm-plan-agent", action="store_true", help="Use configured LLM PlanAgent for construction planning and replanning.")
     parser.add_argument("--max-tokens", type=int, default=None, help="Override codegen max_tokens.")
+    parser.add_argument("--plan-agent-max-tokens", type=int, default=8192, help="Max tokens for LLM PlanAgent.")
     parser.add_argument("--output-dir", help="Output directory, absolute or relative to project root.")
+    parser.add_argument("--test-name", help="Convenience output name under outputs/, e.g. test_01.")
+    parser.add_argument("--clean-output", action="store_true", help="Delete the selected output directory before running.")
     parser.add_argument("--case-ids", help="Comma-separated case_id or native_id filter.")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--verification-mode", default="figure_only", choices=("full", "figure_only", "figure_and_data"))
+    parser.add_argument("--enable-layout-replanning", action="store_true", help="Run layout-only critique, plan revision, and codegen rerun after first render.")
+    parser.add_argument("--layout-replan-rounds", type=int, default=1, help="Maximum layout replanning rounds.")
+    parser.add_argument("--layout-critic-max-tokens", type=int, default=2048, help="Max tokens for the layout critic LLM call.")
+    parser.add_argument("--enable-figure-reader", action="store_true", help="Run VLM FigureReaderAgent during layout replanning.")
+    parser.add_argument("--figure-reader-max-tokens", type=int, default=2048, help="Max tokens for the figure reader VLM call.")
+    parser.add_argument(
+        "--layout-agent-backend",
+        default="text",
+        choices=("text", "vlm"),
+        help="Use text-only layout critic or VLM-backed LayoutAgent for layout replanning.",
+    )
+    parser.add_argument(
+        "--layout-replan-acceptance",
+        default="candidate_only",
+        choices=("candidate_only", "internal_verifier"),
+        help="Whether to only save layout replan candidates or promote candidates accepted by the internal verifier.",
+    )
     parser.add_argument("--continue-on-error", action="store_true", default=True)
     return parser.parse_args()
 
@@ -147,6 +210,43 @@ def build_code_generator(config: AblationRunConfig, *, use_llm: bool, max_tokens
     )
 
 
+def build_plan_agent(config: AblationRunConfig, *, enabled: bool, max_tokens: int | None):
+    if not enabled:
+        return None
+    provider = config.plan_provider or config.codegen_provider or config.parser_provider or config.repair_provider
+    return LLMPlanAgent(
+        OpenAICompatibleLLMClient(require_provider(provider, role="plan agent")),
+        max_tokens=max_tokens,
+    )
+
+
+def build_layout_critic(config: AblationRunConfig, *, enabled: bool, backend: str, max_tokens: int | None):
+    if not enabled:
+        return None
+    provider = config.layout_provider or config.codegen_provider or config.parser_provider or config.repair_provider
+    client = OpenAICompatibleLLMClient(require_provider(provider, role="layout critic"))
+    if backend == "vlm":
+        return VLMLayoutAgent(
+            client,
+            max_tokens=max_tokens,
+        )
+    return LLMLayoutCriticAgent(
+        client,
+        max_tokens=max_tokens,
+    )
+
+
+def build_figure_reader(config: AblationRunConfig, *, enabled: bool, max_tokens: int | None):
+    if not enabled:
+        return None
+    provider = config.layout_provider or config.codegen_provider or config.parser_provider or config.repair_provider
+    client = OpenAICompatibleLLMClient(require_provider(provider, role="figure reader"))
+    return VLMFigureReaderAgent(
+        client,
+        max_tokens=max_tokens,
+    )
+
+
 def require_provider(provider, *, role: str):
     if provider is None:
         raise ValueError(f"LLM {role} backend is enabled but no provider configuration was found.")
@@ -171,7 +271,7 @@ def case_summary(case, *, result, error: BaseException | None, case_dir: Path | 
         }
     return {
         "case_id": case.case_id,
-        "generation_mode": case.generation_mode,
+        "generation_mode": result.metadata.get("generation_mode", case.generation_mode),
         "query": case.query,
         "output_dir": str(result.output_dir),
         "image_path": str(result.image_path) if result.image_path else None,
@@ -185,6 +285,19 @@ def case_summary(case, *, result, error: BaseException | None, case_dir: Path | 
         "error_codes": list(result.pipeline_result.report.error_codes),
         "final_code_source": result.metadata.get("final_code_source"),
         "final_code_verified": result.metadata.get("final_code_verified"),
+        "executor_fidelity_ok": result.metadata.get("executor_fidelity_ok"),
+        "executor_fidelity_report_path": result.metadata.get("executor_fidelity_report_path"),
+        "layout_strategy": result.metadata.get("layout_strategy"),
+        "layout_replanning_attempted": result.metadata.get("layout_replanning_attempted"),
+        "layout_replanning_accepted": result.metadata.get("layout_replanning_accepted"),
+        "layout_replanning_rounds": result.metadata.get("layout_replanning_rounds"),
+        "layout_replanning_reason": result.metadata.get("layout_replanning_reason"),
+        "figure_reader_enabled": result.metadata.get("figure_reader_enabled"),
+        "layout_replanning_round_images": result.metadata.get("layout_replanning_round_images"),
+        "round_images_html": str(result.output_dir / "round_images.html")
+        if (result.output_dir / "round_images.html").exists()
+        else None,
+        "source_data_files": result.metadata.get("source_data_files"),
         "render_exception_type": result.render_result.exception_type,
         "render_exception_message": result.render_result.exception_message,
         "metadata": case.generation_context(),
@@ -200,6 +313,7 @@ def build_summary(*, manifest_path: Path, output_dir: Path, config_path: Path | 
         "llm_codegen": llm_codegen,
         "total_cases": len(cases),
         "render_ok": sum(1 for case in cases if case.get("render_ok")),
+        "executor_fidelity_ok": sum(1 for case in cases if case.get("executor_fidelity_ok")),
         "verification_ok": sum(1 for case in cases if case.get("verification_ok")),
         "all_ok": sum(1 for case in cases if case.get("ok")),
         "cases": cases,
@@ -217,6 +331,22 @@ def _resolve_path(value: str | None, project_root: Path) -> Path:
         raise ValueError("Path value is required.")
     path = Path(value)
     return path if path.is_absolute() else project_root / path
+
+
+def _resolve_output_dir(args: argparse.Namespace, project_root: Path) -> Path:
+    if args.output_dir:
+        return _resolve_path(args.output_dir, project_root)
+    if args.test_name:
+        return project_root / "outputs" / _safe_name(args.test_name)
+    return project_root / "outputs" / "test_matplotbench_generation_pipeline"
+
+
+def _safe_clean_output_dir(output_dir: Path, project_root: Path) -> None:
+    resolved = output_dir.resolve()
+    outputs_root = (project_root / "outputs").resolve()
+    if resolved == outputs_root or outputs_root not in resolved.parents:
+        raise ValueError(f"Refusing to clean output dir outside project outputs/: {resolved}")
+    shutil.rmtree(resolved)
 
 
 def _safe_name(value: str) -> str:

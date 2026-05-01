@@ -521,12 +521,11 @@ def _select_cases(raw_cases: list[dict[str, Any]], explicit_case_ids: tuple[str,
 
 
 def _instruction_text(raw_case: dict[str, Any]) -> str:
-    parts = []
-    for key in ("expert_instruction", "simple_instruction", "instruction", "query"):
+    for key in ("query", "simple_instruction", "instruction", "expert_instruction"):
         value = raw_case.get(key)
-        if isinstance(value, str) and value.strip() and value.strip() not in parts:
-            parts.append(value.strip())
-    return "\n\n".join(parts)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _copy_workspace(source: Path, target: Path) -> None:

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from collections import Counter
@@ -260,9 +260,13 @@ def _resolve_query(record: Any, *, prefer_expert: bool) -> str:
     if callable(preferred_instruction):
         return str(preferred_instruction(prefer_expert=prefer_expert))
     if isinstance(record, dict):
+        for key in ("query", "instruction"):
+            value = record.get(key)
+            if value:
+                return str(value)
         if prefer_expert and record.get("expert_instruction"):
             return str(record["expert_instruction"])
-        for key in ("simple_instruction", "query", "instruction"):
+        for key in ("simple_instruction", "expert_instruction"):
             value = record.get(key)
             if value:
                 return str(value)
@@ -397,3 +401,4 @@ def _jsonable(value: Any) -> Any:
         except Exception:
             pass
     return str(value)
+

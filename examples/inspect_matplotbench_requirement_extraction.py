@@ -98,7 +98,7 @@ def parse_args() -> argparse.Namespace:
 
 def process_record(parser_provider, record: dict[str, Any], *, total: int) -> dict[str, Any]:
     parser = LLMIntentParser(OpenAICompatibleLLMClient(parser_provider))
-    query = str(record.get("expert_instruction") or record.get("simple_instruction") or record.get("query") or "")
+    query = str(record.get("query") or record.get("simple_instruction") or record.get("expert_instruction") or "")
     bundle = parser.parse_requirements(query, TableSchema(columns={}))
     return {
         "case_id": record["case_id"],
@@ -526,7 +526,7 @@ def render_case_card(case: dict[str, Any]) -> str:
       <div class="grid">
         <div class="block">
           <h3>Instruction</h3>
-          <div class="mono">{escape_html(str(case.get("expert_instruction") or case.get("simple_instruction") or ""))}</div>
+          <div class="mono">{escape_html(str(case.get("query") or case.get("simple_instruction") or case.get("expert_instruction") or ""))}</div>
         </div>
         <div class="block">
           <h3>Plan</h3>

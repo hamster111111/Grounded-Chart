@@ -243,7 +243,7 @@ def _load_native_failed_cases(path: Path) -> dict[str, ChartCase]:
 
 def _expected_trace_from_native_case(raw: dict[str, Any]):
     texts: list[tuple[str, str]] = []
-    for key in ("expert_instruction", "simple_instruction", "instruction", "query"):
+    for key in ("query", "simple_instruction", "instruction", "expert_instruction"):
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
             texts.append((key, value))

@@ -83,6 +83,19 @@ class RequirementExtractionRunnerTest(unittest.TestCase):
         self.assertEqual(case.metadata["native_id"], 12)
         self.assertEqual(case.requirement_plan["requirements"][0]["name"], "artist_type")
 
+    def test_runner_respects_explicit_query_over_expert_instruction(self):
+        parser = StubRequirementParser()
+        runner = RequirementExtractionRunner(parser)
+        record = {
+            "case_id": "explicit-query-case",
+            "query": "Use the benchmark-facing simple query.",
+            "simple_instruction": "Use the simple query.",
+            "expert_instruction": "Use an expert-only instruction.",
+        }
+
+        report = runner.run([record])
+
+        self.assertEqual(report.cases[0].query, "Use the benchmark-facing simple query.")
     def test_runner_records_parser_errors_when_continue_on_error(self):
         runner = RequirementExtractionRunner(ErrorParser(), continue_on_error=True)
 

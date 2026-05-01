@@ -408,7 +408,7 @@ class MatplotBenchGenerationAdapter:
         rows = tuple(dict(row) for row in (raw.get("rows") or ()))
         generation_mode = str(raw.get("generation_mode") or _matplotbench_generation_mode(schema, rows))
         ground_truth_path = _optional_path(raw.get("ground_truth_path"))
-        data_dir = _optional_path(raw.get("data_dir"))
+        data_dir = _optional_path(raw.get("data_dir") or raw.get("workspace_dir"))
         metadata = {
             "source_manifest": str(self.manifest_path),
             "native_id": raw.get("native_id", raw.get("id")),

@@ -117,12 +117,12 @@ class JsonCaseAdapter:
 
     def _expected_trace_source_texts(self, raw_case: dict[str, Any]) -> tuple[tuple[str, str], ...]:
         sources: list[tuple[str, str]] = []
-        for key in ("expert_instruction", "simple_instruction", "instruction", "raw_instruction", "prompt", "query"):
+        for key in ("query", "simple_instruction", "instruction", "raw_instruction", "prompt", "expert_instruction"):
             value = raw_case.get(key)
             if isinstance(value, str) and value.strip():
                 sources.append((key, value))
         metadata = raw_case.get("metadata") if isinstance(raw_case.get("metadata"), dict) else {}
-        for key in ("expert_instruction", "simple_instruction", "instruction", "raw_instruction", "source_instruction"):
+        for key in ("source_instruction", "simple_instruction", "instruction", "raw_instruction", "expert_instruction"):
             value = metadata.get(key)
             if isinstance(value, str) and value.strip():
                 sources.append((f"metadata.{key}", value))
