@@ -10,7 +10,7 @@ from grounded_chart.construction_plan import (
     ChartConstructionPlan,
     chart_construction_plan_from_dict,
 )
-from grounded_chart.llm import LLMClient, LLMCompletionTrace
+from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
 from grounded_chart.requirements import ChartRequirementPlan
 
 
@@ -107,10 +107,31 @@ class LLMPlanAgent:
             max_tokens=self.max_tokens,
         )
         payload = result.payload
-        raw_plan = payload.get("construction_plan") or payload.get("plan")
+        _write_llm_response_artifact(workspace, result)
+        raw_plan, plan_payload_key = _extract_raw_plan(payload)
         if not isinstance(raw_plan, dict):
-            raise ValueError("LLMPlanAgent response missing object `construction_plan`.")
-        plan = chart_construction_plan_from_dict(raw_plan)
+            message = "LLMPlanAgent response missing object `construction_plan`, `plan`, or `revised_plan`."
+            _write_plan_parse_error_artifact(
+                workspace,
+                payload=payload,
+                result=result,
+                message=message,
+                error_type="missing_plan_object",
+                plan_payload_key=plan_payload_key,
+            )
+            raise ValueError(message)
+        try:
+            plan = chart_construction_plan_from_dict(raw_plan)
+        except Exception as exc:
+            _write_plan_parse_error_artifact(
+                workspace,
+                payload=payload,
+                result=result,
+                message=str(exc),
+                error_type=type(exc).__name__,
+                plan_payload_key=plan_payload_key,
+            )
+            raise
         raw_resolution = tuple(
             dict(item)
             for item in list(payload.get("feedback_resolution") or [])
@@ -138,6 +159,8 @@ class LLMPlanAgent:
                 "self_check_ok": self_check["ok"],
                 "state_mode": "file_backed" if workspace is not None else "stateless",
                 "prompt_payload_path": str(workspace / "prompt_payload.json") if workspace is not None else None,
+                "llm_response_path": str(workspace / "llm_response.json") if workspace is not None else None,
+                "plan_payload_key": plan_payload_key,
             },
         )
         _write_result_artifacts(workspace, result=plan_result, self_check=self_check, input_package=input_package)
@@ -281,6 +304,44 @@ def _write_prompt_payload(workspace: Path | None, payload: dict[str, Any]) -> No
     _write_json(workspace / "prompt_payload.json", payload)
 
 
+def _write_llm_response_artifact(workspace: Path | None, result: LLMJsonResult) -> None:
+    if workspace is None:
+        return
+    _write_json(
+        workspace / "llm_response.json",
+        {
+            "payload": result.payload,
+            "trace": _llm_trace_payload(result.trace),
+        },
+    )
+
+
+def _write_plan_parse_error_artifact(
+    workspace: Path | None,
+    *,
+    payload: dict[str, Any],
+    result: LLMJsonResult,
+    message: str,
+    error_type: str,
+    plan_payload_key: str | None,
+) -> None:
+    if workspace is None:
+        return
+    _write_json(
+        workspace / "parse_error.json",
+        {
+            "stage": "plan_payload_parse",
+            "error_type": error_type,
+            "message": message,
+            "accepted_plan_keys": list(_PLAN_PAYLOAD_KEYS),
+            "plan_payload_key": plan_payload_key,
+            "payload_keys": sorted(str(key) for key in payload.keys()),
+            "payload": payload,
+            "trace": _llm_trace_payload(result.trace),
+        },
+    )
+
+
 def _write_result_artifacts(
     workspace: Path | None,
     *,
@@ -300,6 +361,20 @@ def _write_result_artifacts(
         self_check=self_check,
     )
     _write_json(workspace / "task_memory.json", memory)
+
+
+_PLAN_PAYLOAD_KEYS = ("construction_plan", "plan", "revised_plan")
+
+
+def _extract_raw_plan(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    for key in _PLAN_PAYLOAD_KEYS:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value, key
+    for key in _PLAN_PAYLOAD_KEYS:
+        if key in payload:
+            return None, key
+    return None, None
 
 
 def _load_previous_memory(workspace: Path | None, round_index: int) -> dict[str, Any]:
@@ -668,6 +743,30 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_jsonable(item) for item in value]
     return str(value)
+
+
+def _llm_trace_payload(trace: LLMCompletionTrace | None) -> dict[str, Any] | None:
+    if trace is None:
+        return None
+    usage = trace.usage
+    return {
+        "provider": trace.provider,
+        "model": trace.model,
+        "base_url": trace.base_url,
+        "temperature": trace.temperature,
+        "max_tokens": trace.max_tokens,
+        "raw_text": trace.raw_text,
+        "parsed_json": trace.parsed_json,
+        "usage": None
+        if usage is None
+        else {
+            "prompt_tokens": usage.prompt_tokens,
+            "completion_tokens": usage.completion_tokens,
+            "total_tokens": usage.total_tokens,
+            "raw": usage.raw,
+        },
+        "raw_response": trace.raw_response,
+    }
 
 
 def _compact_source_execution(value: Any) -> Any:

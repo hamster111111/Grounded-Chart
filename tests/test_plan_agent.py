@@ -59,6 +59,78 @@ class LLMPlanAgentTest(unittest.TestCase):
         self.assertEqual("addressed", result.feedback_resolution[0]["status"])
         self.assertEqual("fake-model", result.llm_trace.model)
 
+    def test_llm_plan_agent_accepts_revised_plan_payload_key(self):
+        class FakeClient:
+            def complete_json_with_trace(self, **kwargs):
+                return LLMJsonResult(
+                    payload={
+                        "agent_name": "fake_replan_agent",
+                        "revised_plan": {
+                            "plan_type": "chart_construction_plan_v2",
+                            "layout_strategy": "feedback_replanned",
+                            "figure_size": [8, 4],
+                            "panels": [
+                                {
+                                    "panel_id": "panel.main",
+                                    "role": "main_chart",
+                                    "layers": [
+                                        {
+                                            "layer_id": "layer.line",
+                                            "chart_type": "line",
+                                            "role": "main_line_layer",
+                                            "x": "year",
+                                            "y": ["sales"],
+                                        }
+                                    ],
+                                }
+                            ],
+                            "global_elements": [],
+                            "decisions": [],
+                            "assumptions": [],
+                            "constraints": [],
+                            "data_transform_plan": [],
+                            "execution_steps": [],
+                            "style_policy": {},
+                        },
+                        "feedback_resolution": [],
+                    },
+                    trace=LLMCompletionTrace(model="fake-model", raw_text='{"revised_plan": {}}'),
+                )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            result = LLMPlanAgent(FakeClient()).build_plan(
+                PlanAgentRequest(query="revise plot", case_id="case_replan", output_root=Path(output_tmp), round_index=2)
+            )
+            workspace = Path(output_tmp) / "PlanAgent" / "round_2"
+            response = json.loads((workspace / "llm_response.json").read_text(encoding="utf-8"))
+
+            self.assertEqual("feedback_replanned", result.plan.layout_strategy)
+            self.assertEqual("revised_plan", result.metadata["plan_payload_key"])
+            self.assertEqual("fake_replan_agent", result.agent_name)
+            self.assertIn("revised_plan", response["payload"])
+
+    def test_llm_plan_agent_writes_parse_error_for_missing_plan_payload(self):
+        class FakeClient:
+            def complete_json_with_trace(self, **kwargs):
+                return LLMJsonResult(
+                    payload={"agent_name": "bad_plan_agent", "rationale": "missing plan"},
+                    trace=LLMCompletionTrace(model="fake-model", raw_text='{"agent_name": "bad_plan_agent"}'),
+                )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            with self.assertRaisesRegex(ValueError, "missing object"):
+                LLMPlanAgent(FakeClient()).build_plan(
+                    PlanAgentRequest(query="plot sales", case_id="case_bad", output_root=Path(output_tmp))
+                )
+            workspace = Path(output_tmp) / "PlanAgent" / "round_1"
+            parse_error = json.loads((workspace / "parse_error.json").read_text(encoding="utf-8"))
+            response = json.loads((workspace / "llm_response.json").read_text(encoding="utf-8"))
+
+            self.assertEqual("missing_plan_object", parse_error["error_type"])
+            self.assertEqual(["agent_name", "rationale"], parse_error["payload_keys"])
+            self.assertIn("revised_plan", parse_error["accepted_plan_keys"])
+            self.assertEqual("bad_plan_agent", response["payload"]["agent_name"])
+
     def test_llm_plan_agent_autofills_missing_feedback_resolution(self):
         class FakeClient:
             def complete_json_with_trace(self, **kwargs):
