@@ -7,6 +7,7 @@ from pathlib import Path
 from grounded_chart.figure_reader import FigureAudit, VLMFigureReaderAgent, figure_audit_plan_feedback, normalized_figure_audit_notes
 from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
 from grounded_chart.rendering import ChartRenderResult
+from grounded_chart.source_data import SourceDataPlanner
 
 
 class FakeVisionClient:
@@ -19,18 +20,18 @@ class FakeVisionClient:
             payload={
                 "ok": False,
                 "summary": "The chart is hard to read because series identity and change role are conflated.",
-                "readability_issues": [
+                "issues": [
                     {
+                        "family": "readability",
                         "issue_type": "legend_ambiguity",
                         "severity": "warning",
                         "evidence": "The legend does not clearly separate series and change roles.",
                         "affected_region": "legend",
                         "related_plan_ref": "panel.main",
                         "recommendation": "Clarify legend semantics and visual channels.",
-                    }
-                ],
-                "encoding_confusions": [
+                    },
                     {
+                        "family": "encoding",
                         "issue_type": "color_role_series_confusion",
                         "severity": "warning",
                         "evidence": "Bars use color in a way that may not distinguish both semantics.",
@@ -39,9 +40,6 @@ class FakeVisionClient:
                         "recommendation": "Use separate cues for change role and series identity.",
                     }
                 ],
-                "data_semantic_warnings": [],
-                "suspicious_artifacts": [],
-                "unclear_regions": [],
                 "recommended_plan_notes": [
                     {
                         "issue_type": "color_role_series_confusion",
@@ -63,23 +61,42 @@ class VLMFigureReaderAgentTest(unittest.TestCase):
         client = FakeVisionClient()
         agent = VLMFigureReaderAgent(client)
         with tempfile.TemporaryDirectory() as tmpdir:
-            image_path = Path(tmpdir) / "round1.png"
+            tmp_path = Path(tmpdir)
+            data_dir = tmp_path / "data"
+            data_dir.mkdir()
+            (data_dir / "Imports.csv").write_text(
+                "Year,Urban,Rural\n2002,10,8\n2008,14,9\n2016,18,11\n",
+                encoding="utf-8",
+            )
+            source_plan = SourceDataPlanner().build_plan(
+                workspace=data_dir,
+                instruction="Create a chart from Imports.csv for 2002, 2008, and 2016.",
+            )
+            image_path = tmp_path / "round1.png"
             image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
             audit = agent.audit(
-                query="Create a waterfall chart.",
+                query="Create a waterfall chart from Imports.csv for 2002, 2008, and 2016.",
                 construction_plan={"panels": [{"panel_id": "panel.main", "layers": []}]},
                 generated_code="ax.bar(x, y, color='steelblue')",
                 render_result=ChartRenderResult(ok=True, image_path=image_path),
                 actual_figure=None,
                 artifact_workspace_report={"artifacts": []},
                 generation_context={"native_id": 98},
+                source_data_plan=source_plan,
             )
 
         self.assertFalse(audit.ok)
         self.assertEqual("vlm", audit.metadata["mode"])
+        self.assertEqual("image_original_task_and_original_source_files_only", audit.metadata["input_policy"])
         self.assertEqual(image_path, client.calls[0]["image_path"])
         self.assertIn("FigureReaderAgent", client.calls[0]["system_prompt"])
-        self.assertIn("construction_plan_visual_semantics", client.calls[0]["user_prompt"])
+        user_prompt = client.calls[0]["user_prompt"]
+        self.assertIn("original_source_file_cards", user_prompt)
+        self.assertIn("Imports.csv", user_prompt)
+        self.assertIn("requested_year_rows", user_prompt)
+        self.assertNotIn("construction_plan_visual_semantics", user_prompt)
+        self.assertNotIn("generated_code_visual_excerpt", user_prompt)
+        self.assertNotIn("artifact_workspace", user_prompt)
         self.assertEqual("color_role_series_confusion", audit.encoding_confusions[0]["issue_type"])
 
     def test_figure_audit_plan_feedback_is_bounded(self) -> None:

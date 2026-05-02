@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import csv
 import json
+import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMUsage
 from grounded_chart.plan_feedback import normalize_figure_plan_feedback
+from grounded_chart.source_data import parse_scalar, short_cell
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,7 @@ class FigureReaderAgent(Protocol):
         actual_figure: Any | None = None,
         artifact_workspace_report: Any | None = None,
         generation_context: dict[str, Any] | None = None,
+        source_data_plan: Any | None = None,
     ) -> FigureAudit:
         """Return visual-semantic audit evidence for a rendered chart."""
 
@@ -88,7 +92,7 @@ class VLMFigureReaderAgent:
         client: LLMClient,
         *,
         agent_name: str = "vlm_figure_reader_v1",
-        max_tokens: int | None = 2048,
+        max_tokens: int | None = 1024,
     ) -> None:
         self.client = client
         self.agent_name = agent_name
@@ -104,6 +108,7 @@ class VLMFigureReaderAgent:
         actual_figure: Any | None = None,
         artifact_workspace_report: Any | None = None,
         generation_context: dict[str, Any] | None = None,
+        source_data_plan: Any | None = None,
     ) -> FigureAudit:
         image_path = getattr(render_result, "image_path", None)
         if image_path is None:
@@ -132,11 +137,7 @@ class VLMFigureReaderAgent:
                 system_prompt=_system_prompt(),
                 user_prompt=_user_prompt(
                     query=query,
-                    construction_plan=construction_plan,
-                    generated_code=generated_code,
-                    render_result=render_result,
-                    actual_figure=actual_figure,
-                    artifact_workspace_report=artifact_workspace_report,
+                    source_data_plan=source_data_plan,
                     generation_context=generation_context,
                 ),
                 image_path=image_path,
@@ -148,15 +149,16 @@ class VLMFigureReaderAgent:
                 "VLMFigureReaderAgent image audit failed. Configure a vision-capable model for figure reading "
                 "or run without --enable-figure-reader."
             ) from exc
-        payload = result.payload
+        payload = _normalize_figure_reader_payload(result.payload)
+        issues = _dict_tuple(payload.get("issues"))
         return FigureAudit(
             ok=bool(payload.get("ok", False)),
             summary=str(payload.get("summary") or ""),
-            readability_issues=_dict_tuple(payload.get("readability_issues")),
-            encoding_confusions=_dict_tuple(payload.get("encoding_confusions")),
-            data_semantic_warnings=_dict_tuple(payload.get("data_semantic_warnings")),
-            suspicious_artifacts=_dict_tuple(payload.get("suspicious_artifacts")),
-            unclear_regions=_dict_tuple(payload.get("unclear_regions")),
+            readability_issues=_issues_by_family(issues, "readability", payload.get("readability_issues")),
+            encoding_confusions=_issues_by_family(issues, "encoding", payload.get("encoding_confusions")),
+            data_semantic_warnings=_issues_by_family(issues, "data_semantic", payload.get("data_semantic_warnings")),
+            suspicious_artifacts=_issues_by_family(issues, "artifact", payload.get("suspicious_artifacts")),
+            unclear_regions=_issues_by_family(issues, "unclear", payload.get("unclear_regions")),
             recommended_plan_notes=_normalize_note_tuple(payload.get("recommended_plan_notes")),
             plan_feedback=tuple(
                 dict(item)
@@ -170,7 +172,8 @@ class VLMFigureReaderAgent:
                 "mode": "vlm",
                 "image_pixels_available": True,
                 "image_path": str(image_path),
-                "scope": "visual_semantic_readability_audit",
+                "scope": "source_aware_visual_semantic_readability_audit",
+                "input_policy": "image_original_task_and_original_source_files_only",
             },
         )
 
@@ -230,15 +233,15 @@ def normalized_figure_audit_notes(audit: FigureAudit | None) -> tuple[dict[str, 
 def _system_prompt() -> str:
     return (
         "You are FigureReaderAgent for a grounded chart-generation pipeline. "
-        "Inspect the rendered chart image as the primary evidence, then use the request, construction plan, figure trace, and artifact workspace as constraints. "
-        "Your job is to report whether the chart is understandable and visually faithful at a semantic level: readable marks, distinguishable encodings, non-confusing legends, visible annotations, sensible composition, and suspicious visual artifacts. "
-        "You may flag that a visible trend, mark geometry, or color/channel mapping appears suspicious, but you must not assert exact numeric data is wrong unless the provided deterministic artifacts or figure trace support that claim. "
+        "Inspect the rendered chart image as the primary evidence, then use only the original task and original attached source-file cards as constraints. "
+        "You are independent from PlanAgent and ExecutorAgent: do not rely on construction plans, generated code, artifact workspaces, chart protocols, or pipeline traces. "
+        "Your job is to report whether the chart is understandable and visibly faithful to the original task and source files at a semantic level: readable marks, distinguishable encodings, non-confusing legends, visible annotations, sensible composition, and suspicious visual artifacts. "
+        "You may flag that a visible trend, mark geometry, source-file value range, or color/channel mapping appears suspicious, but you must not assert exact numeric data is wrong unless the supplied source-file cards directly support that claim. "
         "Do not propose code edits. Do not invent missing data. Do not rewrite the task. "
-        "Return only a JSON object with keys: ok, summary, readability_issues, encoding_confusions, data_semantic_warnings, suspicious_artifacts, unclear_regions, plan_feedback, recommended_plan_notes, confidence. "
-        "Each issue or note should be an object with issue_type, severity, evidence, affected_region, related_plan_ref, and recommendation when applicable. "
-        "plan_feedback is preferred and must contain one item per issue with issue_id, source_agent='FigureReaderAgent', issue_type, severity, evidence, affected_region, related_plan_ref, and suggested_plan_action. "
-        "Every suggested_plan_action must target PlanAgent, not ExecutorAgent, and must describe a plan-level contract revision or clarification. "
-        "recommended_plan_notes is a backward-compatible optional field; if used, it must still be intended for PlanAgent adjudication, not direct code patches. "
+        "Return only a compact JSON object with keys: ok, summary, issues, confidence. "
+        "issues must contain at most five objects. Each issue should include family, issue_type, severity, evidence, affected_region, related_plan_ref, and recommendation. "
+        "Use family values readability, encoding, data_semantic, artifact, or unclear. "
+        "Do not output plan_feedback, code patches, or nested action objects; the pipeline will convert issues into PlanAgent feedback. "
         "Use severity values info, warning, or error. If the image is understandable and no evidence-backed concern exists, return ok=true and empty arrays."
     )
 
@@ -246,120 +249,185 @@ def _system_prompt() -> str:
 def _user_prompt(
     *,
     query: str,
-    construction_plan: dict[str, Any],
-    generated_code: str,
-    render_result: Any,
-    actual_figure: Any | None,
-    artifact_workspace_report: Any | None,
+    source_data_plan: Any | None,
     generation_context: dict[str, Any] | None,
 ) -> str:
     payload = {
-        "query": query,
+        "original_task": query,
         "generation_context": _compact_generation_context(generation_context or {}),
-        "construction_plan_visual_semantics": _compact_plan_visual_semantics(construction_plan),
-        "artifact_workspace": _compact_artifact_workspace(artifact_workspace_report),
-        "render_result": _render_payload(render_result),
-        "actual_figure_trace": _figure_payload(actual_figure),
-        "generated_code_visual_excerpt": _code_visual_excerpt(generated_code),
+        "original_source_file_cards": _source_file_cards(
+            query=query,
+            source_data_plan=source_data_plan,
+        ),
+        "input_policy": {
+            "provided_to_agent": [
+                "rendered_image",
+                "original_task",
+                "original_source_file_cards",
+            ],
+            "internal_pipeline_state": "omitted",
+        },
         "audit_scope": {
             "allowed": [
                 "visual readability",
                 "legend/channel ambiguity",
                 "mark overlap or clutter",
                 "missing or unreadable labels/annotations",
-                "suspicious visible data geometry when constrained by artifacts",
+                "suspicious visible data geometry when constrained by original source-file cards",
                 "strange artifacts, clipping, occlusion, or misleading composition",
             ],
             "forbidden": [
-                "exact numeric judging without artifact evidence",
+                "exact numeric judging without source-file-card evidence",
                 "source data edits",
                 "direct code patch proposals",
                 "changing required chart type or required labels by preference",
             ],
+            "max_issues": 5,
         },
     }
-    return "Audit the rendered chart for visual-semantic understandability.\n" + json.dumps(
+    return "Audit the rendered chart using only the original task, original source files, and image.\n" + json.dumps(
         payload,
         ensure_ascii=False,
         indent=2,
     )
 
 
-def _compact_plan_visual_semantics(plan: dict[str, Any]) -> dict[str, Any]:
-    panels = []
-    for panel in list(plan.get("panels") or []):
-        if not isinstance(panel, dict):
+def _source_file_cards(
+    *,
+    query: str,
+    source_data_plan: Any | None,
+    max_files: int = 8,
+) -> list[dict[str, Any]]:
+    payload = source_data_plan.to_dict() if hasattr(source_data_plan, "to_dict") else _jsonable(source_data_plan)
+    if not isinstance(payload, dict):
+        return []
+    requested_years = _requested_years(query)
+    cards = []
+    for item in list(payload.get("files") or [])[:max_files]:
+        if not isinstance(item, dict):
             continue
-        layers = []
-        for layer in list(panel.get("layers") or []):
-            if not isinstance(layer, dict):
-                continue
-            layers.append(
-                {
-                    "layer_id": layer.get("layer_id"),
-                    "chart_type": layer.get("chart_type"),
-                    "role": layer.get("role"),
-                    "data_source": layer.get("data_source"),
-                    "x": layer.get("x"),
-                    "y": layer.get("y"),
-                    "axis": layer.get("axis"),
-                    "encoding": layer.get("encoding"),
-                    "semantic_modifiers": layer.get("semantic_modifiers"),
-                    "visual_channel_plan": layer.get("visual_channel_plan"),
-                    "style_policy": layer.get("style_policy"),
-                    "components": layer.get("components"),
-                }
-            )
-        panels.append(
-            {
-                "panel_id": panel.get("panel_id"),
-                "role": panel.get("role"),
-                "bounds": panel.get("bounds"),
-                "axes": panel.get("axes"),
-                "anchor": panel.get("anchor"),
-                "layout_notes": panel.get("layout_notes"),
-                "placement_policy": panel.get("placement_policy"),
-                "style_policy": panel.get("style_policy"),
-                "layers": layers,
-            }
-        )
+        cards.append(_source_file_card(item, requested_years=requested_years))
+    return cards
+
+
+def _source_file_card(item: dict[str, Any], *, requested_years: set[int]) -> dict[str, Any]:
+    path = Path(str(item.get("path") or ""))
+    suffix = str(item.get("suffix") or path.suffix).lower()
+    base = {
+        "name": item.get("name") or path.name,
+        "suffix": suffix,
+        "columns": list(item.get("columns") or []),
+        "size_bytes": item.get("size_bytes"),
+    }
+    if not path.exists() or not path.is_file():
+        return {**base, "read_error": "source_file_not_found"}
+    try:
+        if suffix in {".csv", ".tsv"}:
+            return {**base, **_tabular_source_card(path, suffix=suffix, requested_years=requested_years)}
+        if suffix == ".json":
+            return {**base, **_json_source_card(path)}
+        return {**base, "read_error": f"unsupported_source_preview:{suffix}"}
+    except Exception as exc:
+        return {**base, "read_error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+
+
+def _tabular_source_card(path: Path, *, suffix: str, requested_years: set[int]) -> dict[str, Any]:
+    delimiter = "\t" if suffix == ".tsv" else ","
+    first_rows: list[dict[str, Any]] = []
+    last_rows: list[dict[str, Any]] = []
+    requested_rows: list[dict[str, Any]] = []
+    numeric: dict[str, dict[str, Any]] = {}
+    row_count = 0
+    columns: list[str] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        columns = [str(item) for item in list(reader.fieldnames or [])]
+        for raw_row in reader:
+            row_count += 1
+            row = {str(key): parse_scalar(value) for key, value in dict(raw_row).items()}
+            compact = _compact_row(row)
+            if len(first_rows) < 3:
+                first_rows.append(compact)
+            last_rows.append(compact)
+            if len(last_rows) > 3:
+                last_rows.pop(0)
+            if requested_years and _row_matches_requested_year(row, requested_years) and len(requested_rows) < 12:
+                requested_rows.append(compact)
+            _update_numeric_profile(numeric, row)
     return {
-        "plan_type": plan.get("plan_type"),
-        "layout_strategy": plan.get("layout_strategy"),
-        "figure_size": plan.get("figure_size"),
-        "panels": panels,
-        "global_elements": plan.get("global_elements"),
-        "constraints": plan.get("constraints"),
-        "style_policy": plan.get("style_policy"),
+        "columns": columns,
+        "row_count": row_count,
+        "first_rows": first_rows,
+        "last_rows": last_rows,
+        "requested_year_rows": requested_rows,
+        "numeric_profile": _finalize_numeric_profile(numeric),
     }
 
 
-def _compact_artifact_workspace(report: Any | None) -> dict[str, Any] | None:
-    if report is None:
-        return None
-    payload = report.to_dict() if hasattr(report, "to_dict") else _jsonable(report)
-    if not isinstance(payload, dict):
-        return {"raw": payload}
-    artifacts = []
-    for item in list(payload.get("artifacts") or []):
-        if not isinstance(item, dict):
+def _json_source_card(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if isinstance(payload, list):
+        rows = [_jsonable(item) for item in payload[:6]]
+        return {
+            "json_type": "list",
+            "row_count": len(payload),
+            "preview_rows": rows,
+        }
+    if isinstance(payload, dict):
+        return {
+            "json_type": "dict",
+            "keys": [str(key) for key in list(payload.keys())[:24]],
+            "preview_items": [
+                {"key": str(key), "value": short_cell(value)}
+                for key, value in list(payload.items())[:8]
+            ],
+        }
+    return {"json_type": type(payload).__name__, "preview": short_cell(payload)}
+
+
+def _requested_years(query: str) -> set[int]:
+    years = set()
+    for token in re.findall(r"\b(?:19|20)\d{2}\b", str(query or "")):
+        try:
+            years.add(int(token))
+        except ValueError:
+            pass
+    return years
+
+
+def _row_matches_requested_year(row: dict[str, Any], requested_years: set[int]) -> bool:
+    for value in row.values():
+        try:
+            if int(value) in requested_years:
+                return True
+        except (TypeError, ValueError):
             continue
-        artifacts.append(
-            {
-                "name": item.get("name"),
-                "kind": item.get("kind"),
-                "relative_path": item.get("relative_path"),
-                "description": item.get("description"),
-                "columns": item.get("columns"),
-                "row_count": item.get("row_count"),
-                "preview": item.get("preview"),
-            }
-        )
+    return False
+
+
+def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {str(key): short_cell(value) for key, value in row.items()}
+
+
+def _update_numeric_profile(profile: dict[str, dict[str, Any]], row: dict[str, Any]) -> None:
+    for key, value in row.items():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            entry = profile.setdefault(str(key), {"min": value, "max": value, "count": 0})
+            entry["min"] = min(entry["min"], value)
+            entry["max"] = max(entry["max"], value)
+            entry["count"] += 1
+
+
+def _finalize_numeric_profile(profile: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
-        "ok": payload.get("ok"),
-        "execution_dir": payload.get("execution_dir"),
-        "artifacts": artifacts[:12],
-        "metadata": payload.get("metadata"),
+        key: {
+            "min": value.get("min"),
+            "max": value.get("max"),
+            "count": value.get("count"),
+        }
+        for key, value in profile.items()
     }
 
 
@@ -367,93 +435,47 @@ def _compact_generation_context(context: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in context.items()
-        if key in {"simple_instruction", "expert_instruction", "metadata", "source", "native_id", "generation_mode"}
+        if key in {"query_source", "native_id", "generation_mode"}
     }
-
-
-def _render_payload(render_result: Any) -> dict[str, Any]:
-    image_path = getattr(render_result, "image_path", None)
-    return {
-        "ok": bool(getattr(render_result, "ok", False)),
-        "image_path": str(image_path) if image_path is not None else None,
-        "backend": getattr(render_result, "backend", None),
-        "exception_type": getattr(render_result, "exception_type", None),
-        "exception_message": getattr(render_result, "exception_message", None),
-        "metadata": _jsonable(getattr(render_result, "metadata", {})),
-    }
-
-
-def _figure_payload(actual_figure: Any | None) -> dict[str, Any] | None:
-    if actual_figure is None:
-        return None
-    axes = []
-    for axis in list(getattr(actual_figure, "axes", ()) or ()):
-        axes.append(
-            {
-                "index": getattr(axis, "index", None),
-                "title": getattr(axis, "title", ""),
-                "xlabel": getattr(axis, "xlabel", ""),
-                "ylabel": getattr(axis, "ylabel", ""),
-                "bounds": list(getattr(axis, "bounds", None) or []),
-                "legend_labels": list(getattr(axis, "legend_labels", ()) or ()),
-                "texts": list(getattr(axis, "texts", ()) or ()),
-                "artists": [
-                    {
-                        "artist_type": getattr(artist, "artist_type", None),
-                        "label": getattr(artist, "label", None),
-                        "count": getattr(artist, "count", None),
-                    }
-                    for artist in list(getattr(axis, "artists", ()) or ())
-                ],
-            }
-        )
-    return {
-        "title": getattr(actual_figure, "title", ""),
-        "size_inches": list(getattr(actual_figure, "size_inches", None) or []),
-        "axes": axes,
-    }
-
-
-def _code_visual_excerpt(code: str, *, max_chars: int = 12000) -> str:
-    lines = str(code or "").splitlines()
-    keywords = (
-        "bar",
-        "fill_between",
-        "plot(",
-        "scatter",
-        "pie",
-        "hist",
-        "imshow",
-        "legend",
-        "label",
-        "color",
-        "cmap",
-        "alpha",
-        "hatch",
-        "annotate",
-        "text(",
-        "set_title",
-        "set_xlabel",
-        "set_ylabel",
-        "set_xlim",
-        "set_ylim",
-        "add_axes",
-        "twinx",
-    )
-    selected: list[str] = []
-    for index, line in enumerate(lines, start=1):
-        if any(keyword in line for keyword in keywords):
-            selected.append(f"{index}: {line}")
-    excerpt = "\n".join(selected) or str(code or "")
-    if len(excerpt) > max_chars:
-        return excerpt[:max_chars] + "\n... [truncated]"
-    return excerpt
 
 
 def _dict_tuple(value: Any) -> tuple[dict[str, Any], ...]:
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(dict(item) for item in value if isinstance(item, dict))
+
+
+def _normalize_figure_reader_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    if "issues" in payload or "summary" in payload or "ok" in payload:
+        return payload
+    if payload.get("issue_type") or payload.get("family"):
+        return {
+            "ok": False,
+            "summary": "",
+            "issues": [payload],
+            "confidence": payload.get("confidence"),
+        }
+    return payload
+
+
+def _issues_by_family(issues: tuple[dict[str, Any], ...], family: str, fallback: Any) -> tuple[dict[str, Any], ...]:
+    fallback_items = _dict_tuple(fallback)
+    if fallback_items:
+        return fallback_items
+    aliases = {
+        "readability": {"readability", "visual_readability", "text"},
+        "encoding": {"encoding", "encoding_confusion", "channel"},
+        "data_semantic": {"data", "data_semantic", "semantic"},
+        "artifact": {"artifact", "suspicious_artifact", "visual_artifact"},
+        "unclear": {"unclear", "occlusion", "ambiguous"},
+    }.get(family, {family})
+    return tuple(
+        {key: value for key, value in item.items() if key != "family"}
+        for item in issues
+        if str(item.get("family") or "").strip().lower() in aliases
+    )
 
 
 def _normalize_note_tuple(value: Any) -> tuple[dict[str, Any], ...]:

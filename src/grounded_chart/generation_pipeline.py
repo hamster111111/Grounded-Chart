@@ -658,6 +658,7 @@ class ChartGenerationPipeline:
                 actual_figure=current_result.actual_figure,
                 artifact_workspace_report=current_artifact_report,
                 generation_context=generation_context,
+                source_data_plan=source_plan,
             )
             combined_critique = _combine_layout_critique_with_figure_audit(critique, audit)
             feedback_bundle = _layout_replan_feedback_bundle(
@@ -943,6 +944,7 @@ class ChartGenerationPipeline:
         actual_figure: Any | None,
         artifact_workspace_report,
         generation_context: dict[str, Any] | None,
+        source_data_plan,
     ) -> FigureAudit | None:
         if self.figure_reader is None:
             return None
@@ -954,6 +956,7 @@ class ChartGenerationPipeline:
             actual_figure=actual_figure,
             artifact_workspace_report=artifact_workspace_report,
             generation_context=generation_context,
+            source_data_plan=source_data_plan,
         )
 
     def _build_plan_with_agent(

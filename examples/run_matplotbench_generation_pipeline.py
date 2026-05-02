@@ -163,7 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layout-replan-rounds", type=int, default=1, help="Maximum layout replanning rounds.")
     parser.add_argument("--layout-critic-max-tokens", type=int, default=2048, help="Max tokens for the layout critic LLM call.")
     parser.add_argument("--enable-figure-reader", action="store_true", help="Run VLM FigureReaderAgent during layout replanning.")
-    parser.add_argument("--figure-reader-max-tokens", type=int, default=2048, help="Max tokens for the figure reader VLM call.")
+    parser.add_argument("--figure-reader-max-tokens", type=int, default=1024, help="Max tokens for the figure reader VLM call.")
     parser.add_argument(
         "--layout-agent-backend",
         default="text",
