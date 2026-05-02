@@ -128,6 +128,36 @@ fig.savefig(OUTPUT_PATH)
         self.assertFalse(report.ok)
         self.assertIn("mixed_overlay_x_coordinate_basis", codes)
 
+    def test_validator_rejects_position_keyed_year_lookup_for_inset_anchors(self) -> None:
+        code = """
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+waterfall_geom = pd.read_csv('execution/round_1/artifact_import_waterfall_waterfall_geometry.csv')
+area_fill = pd.read_csv('execution/round_1/artifact_consumption_area_area_fill_geometry.csv')
+pie_values = pd.read_csv('execution/round_1/artifact_pie_values.csv')
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+unique_years = sorted(waterfall_geom['x_position'].unique())
+year_positions = np.arange(len(unique_years))
+year_to_idx = {y: i for i, y in enumerate(unique_years)}
+for _, row in waterfall_geom.iterrows():
+    ax1.bar(year_to_idx[row['x_position']], row['bar_height'], bottom=row['bar_bottom'])
+x_idx = np.array([year_to_idx.get(v, -1) for v in area_fill['x_value'].values])
+ax2.fill_between(x_idx, area_fill['Urban_fill_bottom'], area_fill['Urban_fill_top'])
+for year in [2002, 2008, 2016]:
+    pie_ax = fig.add_axes([0.2 + year_to_idx[year] * 0.02, 0.7, 0.1, 0.1])
+    pie_ax.pie(pie_values[pie_values['Year'] == year]['Consumption Ratio'])
+ax1.legend()
+ax1.set_title('Grain Import and Consumption Trends')
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=CONTEXT)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertFalse(report.ok)
+        self.assertIn("x_position_mapping_used_for_raw_year_lookup", codes)
+
     def test_validator_rejects_overwriting_prepared_artifacts(self) -> None:
         context = {
             **CONTEXT,

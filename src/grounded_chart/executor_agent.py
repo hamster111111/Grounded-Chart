@@ -208,6 +208,18 @@ def _validate_overlay_coordinate_contract(code: str, construction_plan: dict[str
                 plan_ref="construction_plan.panels.panel.main.placement_policy.shared_x_coordinate_system",
             )
         )
+    if _uses_position_keyed_mapping_for_raw_year_lookup(code):
+        issues.append(
+            ExecutorFidelityIssue(
+                code="x_position_mapping_used_for_raw_year_lookup",
+                message=(
+                    "Executor code appears to derive a lookup from x_position/offset coordinates and then index it "
+                    "with raw year values or x_value anchors. Use Year/x_value as lookup keys or use x_index "
+                    "consistently for all plotted layers and inset anchors."
+                ),
+                plan_ref="construction_plan.panels.panel.main.placement_policy.shared_x_coordinate_system",
+            )
+        )
     if "add_axes(" in code and "tight_layout(" in code:
         issues.append(
             ExecutorFidelityIssue(
@@ -711,6 +723,40 @@ def _mixes_index_and_raw_year_x(code: str) -> bool:
     uses_index = _x_basis_used_as_coordinate(text, index_vars, basis="index")
     uses_raw_year = _x_basis_used_as_coordinate(text, raw_year_vars, basis="raw_year")
     return uses_index and uses_raw_year
+
+
+def _uses_position_keyed_mapping_for_raw_year_lookup(code: str) -> bool:
+    """Detect accidental use of offset plot positions as semantic year keys."""
+
+    text = str(code or "")
+    position_keyed_maps: set[str] = set()
+    for match in re.finditer(
+        r"\b(?P<name>[A-Za-z_]\w*)\s*=\s*\{[^{}]*\bfor\s+[^{}]*\bin\s+[^{}\n]*(?:x_position|x_pos|position)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        position_keyed_maps.add(match.group("name"))
+    for match in re.finditer(
+        r"\b(?P<name>[A-Za-z_]\w*)\s*=\s*\{[^{}]*\bfor\s+[^{}]*\bin\s+[^{}\n]*unique_(?:years|x_values|positions)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        prefix = text[max(0, match.start() - 360) : match.start()]
+        if re.search(r"unique_(?:years|x_values|positions)\s*=\s*[^=\n]*(?:x_position|position)", prefix, re.IGNORECASE):
+            position_keyed_maps.add(match.group("name"))
+    if not position_keyed_maps:
+        return False
+    raw_lookup_patterns = (
+        r"\[[^\]\n]*(?:year|x_value)[^\]\n]*\]",
+        r"\.get\s*\([^\)\n]*(?:year|x_value)[^\)\n]*",
+        r"\[[^\]\n]*20\d{2}[^\]\n]*\]",
+        r"\.get\s*\([^\)\n]*20\d{2}[^\)\n]*",
+    )
+    for name in position_keyed_maps:
+        for pattern in raw_lookup_patterns:
+            if re.search(rf"\b{re.escape(name)}\s*{pattern}", text, re.IGNORECASE):
+                return True
+    return False
 
 
 def _x_basis_used_as_coordinate(code: str, variables: set[str], *, basis: str) -> bool:

@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 import shutil
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -96,7 +97,10 @@ class ChartImageRenderer:
                 stderr=stderr.getvalue(),
                 exception_type=type(exc).__name__,
                 exception_message=str(exc),
-                metadata={"output_path": str(output_path)},
+                metadata={
+                    "output_path": str(output_path),
+                    "traceback": traceback.format_exc(),
+                },
             )
 
 

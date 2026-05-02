@@ -1006,20 +1006,25 @@ class ChartGenerationPipeline:
 
         exception_type = render_result.exception_type or "RenderError"
         exception_message = render_result.exception_message or "No visible chart artifact was produced."
+        exception_traceback = _render_exception_traceback(render_result)
         contract: dict[str, Any] = {
             "render_repair_attempted": False,
             "render_repair_accepted": False,
             "render_repair_reason": "render_failed",
             "render_repair_exception_type": exception_type,
             "render_repair_exception_message": exception_message,
+            "render_repair_exception_traceback": exception_traceback,
         }
         if getattr(self.verifier_pipeline, "repairer", None) is None:
             contract["render_repair_reason"] = "no_repairer"
             return final_code, pipeline_result, render_result, contract
 
         contract["render_repair_attempted"] = True
+        repair_exception_detail = f"{exception_type}: {exception_message}"
+        if exception_traceback:
+            repair_exception_detail = f"{repair_exception_detail}\nTraceback:\n{exception_traceback}"
         repair_exception = ChartRenderStageError(
-            f"Render-stage artifact export failed after verification: {exception_type}: {exception_message}"
+            f"Render-stage artifact export failed after verification: {repair_exception_detail}"
         )
         render_error_result = self._render_repair_pipeline().run_with_execution_error(
             query=query,
@@ -1848,6 +1853,15 @@ def _render_result_to_dict(render: ChartRenderResult) -> dict[str, Any]:
         "exception_message": render.exception_message,
         "metadata": _jsonable(render.metadata),
     }
+
+
+def _render_exception_traceback(render: ChartRenderResult) -> str | None:
+    metadata = render.metadata if isinstance(render.metadata, dict) else {}
+    value = metadata.get("traceback")
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _llm_trace_to_dict(trace: LLMCompletionTrace | None) -> dict[str, Any] | None:

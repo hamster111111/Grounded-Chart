@@ -129,6 +129,8 @@ def _codegen_system_prompt() -> str:
         "For waterfall charts, do not assume terminal/total geometry roles must use a distinct fill color; follow chart_protocols.visual_channel_policy and artifact fields such as fill_color_role, series_color_role, series, and change_role. "
         "For area charts, use semantic_modifiers and composition_policy from prepared artifacts. If composition_policy is overlap, draw independent translucent fill_between layers using the artifact's per-series *_fill_bottom and *_fill_top columns; do not silently stack series by addition. "
         "For overlaid layers and twinx axes, use the same x-coordinate basis everywhere; do not plot bars at 0..N while plotting areas/lines at raw years. "
+        "Coordinate column semantics are binding: `Year`/`x_value` are semantic raw x anchors, `x_index` is the shared integer year index, and `x_position` may include per-series offsets for bar placement. Never build a year lookup from offset `x_position` values; use `Year` or `x_value` as lookup keys and use `x_index` or a derived year_to_index map for shared axis positions. "
+        "For inset/pie anchors at requested years, map raw anchor years through a Year/x_value -> x_index table before converting to figure coordinates. "
         "When generation_mode is instruction_only, `rows` may be empty; then use only constants, labels, and structures explicitly stated in the request. "
         "The code must save the final figure or interactive chart to the provided global variable `OUTPUT_PATH`. "
         "Prefer matplotlib unless the request explicitly needs Plotly or another backend. "
@@ -186,6 +188,7 @@ def _implementation_rules(generation_mode: str) -> list[str]:
         "Implement every explicit construction_plan layer; if a layer cannot be implemented, add a short assumption explaining why.",
         "When multiple layers share an axis or use twinx, define one x variable and reuse it for bars, areas, lines, ticks, and inset anchor calculations.",
         "If using index positions for years, map every data table onto those positions before plotting; if using raw years, use raw years for every overlaid layer.",
+        "Do not use an offset plotting coordinate such as x_position as a semantic key for year lookup. For year-keyed dictionaries, use Year or x_value; for plotting locations, use x_index plus any per-series x_offset only at the bar mark.",
         "If context.artifact_workspace lists execution artifacts, read the relevant required_for_plotting CSV files by Path(OUTPUT_PATH).parent / artifact['relative_path'] instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
         "Only hard_fidelity artifacts and explicit source requirements are blocking contracts. Soft_guidance should improve readability; free_design is delegated to your judgment.",
         "Before using a prepared CSV column, check context.artifact_workspace artifact schemas. Do not assume long-form columns such as series/value exist when the artifact schema is wide.",
