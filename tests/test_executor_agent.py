@@ -104,6 +104,30 @@ fig.savefig(OUTPUT_PATH)
         self.assertFalse(report.ok)
         self.assertIn("mixed_overlay_x_coordinate_basis", codes)
 
+    def test_validator_rejects_artifact_x_position_and_raw_year_mixing(self) -> None:
+        code = """
+import pandas as pd
+import matplotlib.pyplot as plt
+df_waterfall = pd.read_csv('execution/round_1/artifact_import_waterfall_waterfall_geometry.csv')
+df_area = pd.read_csv('execution/round_1/artifact_consumption_area_area_fill_geometry.csv')
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+ax1.bar(df_waterfall['x_position'], df_waterfall['bar_height'], bottom=df_waterfall['bar_bottom'])
+x_area = df_area['x_value'].values
+ax2.fill_between(x_area, df_area['Urban_fill_bottom'], df_area['Urban_fill_top'])
+years_sorted = sorted(df_waterfall['x_value'].unique())
+ax1.set_xticks(years_sorted)
+ax1.set_xticklabels([str(int(y)) for y in years_sorted])
+ax1.legend()
+ax1.set_title('Grain Import and Consumption Trends')
+fig.savefig(OUTPUT_PATH)
+"""
+        report = validate_executor_fidelity(code, context=CONTEXT)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertFalse(report.ok)
+        self.assertIn("mixed_overlay_x_coordinate_basis", codes)
+
     def test_validator_rejects_overwriting_prepared_artifacts(self) -> None:
         context = {
             **CONTEXT,
@@ -421,9 +445,9 @@ for _, row in imports.iterrows():
         color = 'red'
     else:
         color = 'blue'
-    ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=color)
+ax.bar(row['x_position'], row['bar_height'], bottom=row['bar_bottom'], width=row['bar_width'], color=color)
 ax2 = ax.twinx()
-ax2.stackplot(area['Year'], area['Urban'], area['Rural'])
+ax2.stackplot(area['x_index'], area['Urban'], area['Rural'])
 pie_ax = fig.add_axes([0.2, 0.7, 0.1, 0.1])
 pie_ax.pie(pies[pies['Year'] == 2002]['Consumption Ratio'])
 ax.legend()

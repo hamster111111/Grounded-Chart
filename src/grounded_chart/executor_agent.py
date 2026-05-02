@@ -698,19 +698,75 @@ def _requires_shared_x_contract(panels: list[dict[str, Any]]) -> bool:
 def _mixes_index_and_raw_year_x(code: str) -> bool:
     text = str(code or "")
     index_vars = set()
+    raw_year_vars = set()
     for match in re.finditer(r"\b([A-Za-z_]\w*)\s*=\s*np\.arange\s*\(", text):
         index_vars.add(match.group(1))
-    if not index_vars:
+    for match in re.finditer(r"\b([A-Za-z_]\w*)\s*=\s*([^\n]+)", text):
+        name = match.group(1)
+        expression = match.group(2)
+        if _x_expression_uses_index_basis(expression):
+            index_vars.add(name)
+        if _x_expression_uses_raw_year_basis(expression):
+            raw_year_vars.add(name)
+    uses_index = _x_basis_used_as_coordinate(text, index_vars, basis="index")
+    uses_raw_year = _x_basis_used_as_coordinate(text, raw_year_vars, basis="raw_year")
+    return uses_index and uses_raw_year
+
+
+def _x_basis_used_as_coordinate(code: str, variables: set[str], *, basis: str) -> bool:
+    call_pattern = re.compile(
+        r"\b(?:ax\w*|plt)\.(?:bar|barh|plot|fill_between|scatter|stackplot|set_xticks)\s*\((?P<args>[^)]*)\)",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in call_pattern.finditer(code):
+        first_arg = _first_call_arg(match.group("args"))
+        if basis == "index" and (
+            _x_expression_uses_index_basis(first_arg) or _expression_mentions_variable(first_arg, variables)
+        ):
+            return True
+        if basis == "raw_year" and (
+            _x_expression_uses_raw_year_basis(first_arg) or _expression_mentions_variable(first_arg, variables)
+        ):
+            return True
+    return False
+
+
+def _first_call_arg(args: str) -> str:
+    depth = 0
+    quote: str | None = None
+    for index, char in enumerate(str(args or "")):
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char in "([{":
+            depth += 1
+            continue
+        if char in ")]}":
+            depth = max(0, depth - 1)
+            continue
+        if char == "," and depth == 0:
+            return args[:index]
+    return str(args or "")
+
+
+def _expression_mentions_variable(expression: str, variables: set[str]) -> bool:
+    if not variables:
         return False
-    uses_index = any(re.search(rf"\b(?:ax\w*|plt)\.bar\s*\(\s*{re.escape(name)}\b", text) for name in index_vars)
-    uses_year_column = bool(
-        re.search(r"\b(?:ax\w*|plt)\.(?:fill_between|plot|scatter)\s*\([^)]*(?:\[['\"]Year['\"]\]|\.Year\b|year[s]?\b)", text, re.IGNORECASE | re.DOTALL)
-    )
-    sets_index_ticklabels_to_years = (
-        any(re.search(rf"set_xticks\s*\(\s*{re.escape(name)}\b", text) for name in index_vars)
-        and "set_xticklabels" in text
-    )
-    return uses_index and uses_year_column and sets_index_ticklabels_to_years
+    return any(re.search(rf"\b{re.escape(name)}\b", expression) for name in variables)
+
+
+def _x_expression_uses_index_basis(expression: str) -> bool:
+    lower = str(expression or "").lower()
+    return "x_position" in lower or "x_index" in lower or "np.arange" in lower
+
+
+def _x_expression_uses_raw_year_basis(expression: str) -> bool:
+    lower = str(expression or "").lower()
+    return "x_value" in lower or bool(re.search(r"\[['\"]year['\"]\]|\.year\b|\byears?\b", lower))
 
 
 def _has_secondary_axis(code: str) -> bool:

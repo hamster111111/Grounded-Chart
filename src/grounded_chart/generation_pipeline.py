@@ -201,8 +201,8 @@ class ChartGenerationPipeline:
                 "repair_stage": "only_after_generation_and_verification",
             },
             "construction_plan": construction_plan.to_dict(),
-            "artifact_workspace": artifact_workspace_report.to_dict(),
-            "plan_agent": _plan_agent_result_to_dict(plan_agent_result),
+            "artifact_workspace": _artifact_workspace_context(artifact_workspace_report),
+            "plan_agent": _plan_agent_context(plan_agent_result),
         }
         if source_plan.has_files or source_workspace is not None:
             effective_context["source_data_plan"] = source_plan.to_dict()
@@ -768,7 +768,7 @@ class ChartGenerationPipeline:
                 stage="layout_replanning_codegen",
             )
             revised_context.pop("plan_replanning", None)
-            revised_context["plan_agent"] = _plan_agent_result_to_dict(revised_plan_agent_result)
+            revised_context["plan_agent"] = _plan_agent_context(revised_plan_agent_result)
             revised_context["layout_replanning"] = {
                 "round_index": round_index,
                 "acceptance_policy": acceptance_policy,
@@ -1796,7 +1796,7 @@ def _generation_context_for_plan(
             "repair_stage": "only_after_generation_and_verification",
         },
         "construction_plan": construction_plan.to_dict(),
-        "artifact_workspace": artifact_workspace_report.to_dict(),
+        "artifact_workspace": _artifact_workspace_context(artifact_workspace_report),
     }
     if getattr(source_plan, "has_files", False) or source_workspace is not None:
         context["source_data_plan"] = source_plan.to_dict()
@@ -1862,6 +1862,123 @@ def _llm_trace_to_dict(trace: LLMCompletionTrace | None) -> dict[str, Any] | Non
         "usage": _usage_to_dict(trace.usage),
         "parsed_json": _jsonable(trace.parsed_json),
         "raw_text_preview": str(trace.raw_text or "")[:1200],
+    }
+
+
+def _artifact_workspace_context(report: Any) -> dict[str, Any]:
+    """Compact artifact workspace payload for ExecutorAgent prompts.
+
+    Full manifests remain on disk and in reports. Codegen only needs paths,
+    schemas, contract tiers, artifact roles, and compact protocol commitments.
+    Keeping LLM traces and full protocol payloads here creates large prompt
+    spikes during layout replanning without improving executable fidelity.
+    """
+
+    if report is None:
+        return {}
+    payload = report.to_dict() if hasattr(report, "to_dict") else dict(report)
+    artifacts = [
+        _artifact_context(item)
+        for item in list(payload.get("artifacts") or [])
+        if isinstance(item, dict)
+    ]
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    return {
+        "ok": payload.get("ok"),
+        "root": payload.get("root"),
+        "plan_dir": payload.get("plan_dir"),
+        "execution_dir": payload.get("execution_dir"),
+        "repair_dir": payload.get("repair_dir"),
+        "artifacts": artifacts,
+        "issues": [
+            _compact_issue(item)
+            for item in list(payload.get("issues") or [])[:12]
+            if isinstance(item, dict)
+        ],
+        "metadata": {
+            "round_id": metadata.get("round_id"),
+            "case_id": metadata.get("case_id"),
+            "source_files": list(metadata.get("source_files") or []),
+            "chart_protocols": [
+                _protocol_context(item)
+                for item in list(metadata.get("chart_protocols") or [])
+                if isinstance(item, dict)
+            ],
+        },
+    }
+
+
+def _artifact_context(item: dict[str, Any]) -> dict[str, Any]:
+    schema = item.get("schema") if isinstance(item.get("schema"), dict) else {}
+    columns = list(schema.get("columns") or item.get("columns") or [])
+    return {
+        key: _jsonable(value)
+        for key, value in {
+            "name": item.get("name"),
+            "relative_path": item.get("relative_path"),
+            "description": item.get("description"),
+            "artifact_role": item.get("artifact_role"),
+            "chart_type": item.get("chart_type"),
+            "layer_id": item.get("layer_id"),
+            "contract_tier": item.get("contract_tier"),
+            "required_for_plotting": item.get("required_for_plotting"),
+            "legacy_alias": item.get("legacy_alias"),
+            "alias_for": item.get("alias_for"),
+            "schema": {"columns": columns} if columns else None,
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _protocol_context(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _jsonable(value)
+        for key, value in {
+            "chart_type": item.get("chart_type"),
+            "protocol_id": item.get("protocol_id"),
+            "source": item.get("source"),
+            "contract_tiers": item.get("contract_tiers"),
+            "required_artifact_columns": item.get("required_artifact_columns"),
+            "visual_channel_policy": item.get("visual_channel_policy"),
+            "visual_channel_contracts": item.get("visual_channel_contracts"),
+            "hard_fidelity": _list_prefix(item.get("hard_fidelity"), max_items=8),
+            "soft_guidance": _list_prefix(item.get("soft_guidance"), max_items=6),
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _compact_issue(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _jsonable(item.get(key))
+        for key in ("code", "message", "severity", "artifact", "plan_ref")
+        if item.get(key) not in (None, "", [], {})
+    }
+
+
+def _list_prefix(value: Any, *, max_items: int) -> list[Any]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [_jsonable(item) for item in list(value)[:max_items]]
+
+
+def _plan_agent_context(result: PlanAgentResult | None) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    trace = result.llm_trace
+    return {
+        "agent_name": result.agent_name,
+        "feedback_resolution": [dict(item) for item in result.feedback_resolution],
+        "rationale": result.rationale,
+        "llm_trace": {
+            "provider": trace.provider,
+            "model": trace.model,
+            "usage": _usage_to_dict(trace.usage),
+            "max_tokens": trace.max_tokens,
+        }
+        if trace is not None
+        else None,
+        "metadata": _jsonable(result.metadata),
     }
 
 
