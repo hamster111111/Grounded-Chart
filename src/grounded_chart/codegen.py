@@ -111,11 +111,13 @@ def _codegen_system_prompt() -> str:
         "If construction_plan provides semantic placement_policy/anchor/avoid_occlusion rather than numeric bounds, compute concrete layout coordinates yourself from figure size, axes, legends, titles, data density, and inset count. "
         "Record those concrete layout decisions in a JSON file named computed_layout.json and a Markdown file named layout_decisions.md in the same directory as OUTPUT_PATH. "
         "computed_layout.json should map plan refs such as panel.main or panel.pie_2008 to computed bounds/positions and short reasons. "
+        "Layout/evidence records are heterogeneous: panels may have bounds, while legends, titles, annotations, and notes may only have placement or reason fields. When writing JSON or Markdown evidence files, use safe field access such as dict.get and write N/A for missing optional fields; auxiliary evidence logging must never raise KeyError or block saving OUTPUT_PATH. "
         "When context.layout_replanning is provided, this is a PlanAgent replanning round: preserve source-grounded data and explicit requirements, but make concrete rendered changes required by layout_replanning.feedback_bundle. "
         "Do not satisfy replanning feedback by changing only comments, metadata, or artifact round paths. "
         "In layout_replanning mode, do not change source file reads, prepared artifact paths, deterministic data transformations, plotted values, source files, required labels, or required legend categories. "
         "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared plotting CSV artifacts using each artifact's `relative_path` (for example execution/round_1/artifact_*.csv), not a bare filename. "
-        "Do not assume prepared artifacts are in the current directory; they are under the artifact_workspace execution_dir. "
+        "Resolve prepared artifact paths relative to Path(OUTPUT_PATH).parent, e.g. Path(OUTPUT_PATH).parent / relative_path; do not join artifact filenames directly to output_dir or infer execution_dir from OUTPUT_PATH parents. "
+        "The runtime may also expose a global `artifact_workspace` object, but code must still use artifact relative_path so exported code stays portable. "
         "The final plot code must not recompute prepared plotted values from raw source CSVs. "
         "Artifact metadata is tiered: hard_fidelity artifacts are binding data/geometry inputs; soft_guidance artifacts are advisory; free_design artifacts are optional compatibility/design-space material. Choose artifacts by artifact_role, chart_type, layer_id, contract_tier, and schema.columns; do not rely on fixed benchmark filenames or guessed column names. "
         "Artifact schemas are binding: use only columns listed in context.artifact_workspace.artifacts[].schema.columns/columns unless your code explicitly creates a documented derived intermediate table. "
@@ -180,10 +182,11 @@ def _implementation_rules(generation_mode: str) -> list[str]:
         "Inferred construction_plan decisions may fill missing layout details, but must not contradict explicit requirements.",
         "When layout coordinates are not hard-coded in the plan, compute them in code and save computed_layout.json plus layout_decisions.md next to OUTPUT_PATH.",
         "The computed layout record should include each main panel/inset/global element, its computed coordinates or placement, the source plan refs used, and the reason for the decision.",
+        "When serializing computed layout or visual-channel evidence, do not index optional keys such as bounds, placement, anchor, reason, or style directly. Use safe lookups and tolerate heterogeneous record schemas so evidence writing cannot crash final rendering.",
         "Implement every explicit construction_plan layer; if a layer cannot be implemented, add a short assumption explaining why.",
         "When multiple layers share an axis or use twinx, define one x variable and reuse it for bars, areas, lines, ticks, and inset anchor calculations.",
         "If using index positions for years, map every data table onto those positions before plotting; if using raw years, use raw years for every overlaid layer.",
-        "If context.artifact_workspace lists execution artifacts, read the relevant required_for_plotting CSV files by their artifact relative_path for plotting instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
+        "If context.artifact_workspace lists execution artifacts, read the relevant required_for_plotting CSV files by Path(OUTPUT_PATH).parent / artifact['relative_path'] instead of recomputing equivalent data from source CSVs. This is mandatory, not optional.",
         "Only hard_fidelity artifacts and explicit source requirements are blocking contracts. Soft_guidance should improve readability; free_design is delegated to your judgment.",
         "Before using a prepared CSV column, check context.artifact_workspace artifact schemas. Do not assume long-form columns such as series/value exist when the artifact schema is wide.",
         "If chart protocol files are listed in context.artifact_workspace, treat hard_fidelity items as binding chart-type instructions. In particular, hard_fidelity waterfall geometry requires a render table and explicit bar bottoms.",

@@ -286,6 +286,7 @@ class ChartGenerationPipeline:
             output_dir=output_root,
             output_filename=primary_render_image_name,
             file_path=final_code_path,
+            globals_dict=_render_globals(artifact_workspace_report),
         )
         final_code, pipeline_result, render_result, render_contract = self._resolve_render_failure(
             final_code=final_code,
@@ -301,6 +302,7 @@ class ChartGenerationPipeline:
             verify_data=verify_data,
             parsed=parsed,
             parse_source=effective_parse_source,
+            artifact_workspace_report=artifact_workspace_report,
         )
         if render_contract.get("render_repair_accepted"):
             final_code_path.write_text(final_code, encoding="utf-8")
@@ -829,6 +831,7 @@ class ChartGenerationPipeline:
                 output_dir=output_root,
                 output_filename=_round_image_name(round_index + 1, image_name),
                 file_path=revised_code_path,
+                globals_dict=_render_globals(revised_artifact_report),
             )
             revised_layout_records = _snapshot_executor_layout_records(
                 output_root=output_root,
@@ -990,6 +993,7 @@ class ChartGenerationPipeline:
         verify_data: bool,
         parsed: ParsedRequirementBundle,
         parse_source: str,
+        artifact_workspace_report,
     ) -> tuple[str, PipelineResult, ChartRenderResult, dict[str, Any]]:
         if render_result.ok:
             return final_code, pipeline_result, render_result, {
@@ -1102,6 +1106,7 @@ class ChartGenerationPipeline:
                 output_dir=output_root,
                 output_filename=image_name,
                 file_path=candidate_path,
+                globals_dict=_render_globals(artifact_workspace_report),
             )
             candidate_score = _verification_score(candidate_result)
             verification_not_regressed = candidate_score <= original_score
@@ -1702,6 +1707,17 @@ def _snapshot_executor_layout_records(
         except OSError:
             records[key] = None
     return records
+
+
+def _render_globals(artifact_workspace_report) -> dict[str, Any]:
+    if artifact_workspace_report is None:
+        return {}
+    to_dict = getattr(artifact_workspace_report, "to_dict", None)
+    if callable(to_dict):
+        return {"artifact_workspace": to_dict()}
+    if isinstance(artifact_workspace_report, dict):
+        return {"artifact_workspace": dict(artifact_workspace_report)}
+    return {}
 
 
 def _code_preservation_excerpt(code: str, *, max_chars: int = 18000) -> str:

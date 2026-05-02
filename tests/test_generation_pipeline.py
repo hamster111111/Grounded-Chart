@@ -82,6 +82,47 @@ class ChartGenerationPipelineTest(unittest.TestCase):
             self.assertEqual("initial_code", manifest["verification"]["final_code_source"])
             self.assertTrue(manifest["verification"]["final_code_verified"])
 
+    def test_renderer_receives_artifact_workspace_globals(self):
+        class CapturingRenderer:
+            def __init__(self):
+                self.globals_dict = None
+
+            def render(self, code, *, rows, output_dir, output_filename="figure.png", file_path=None, globals_dict=None):
+                self.globals_dict = globals_dict
+                output_path = Path(output_dir) / output_filename
+                output_path.write_bytes(b"fake-png")
+                return ChartRenderResult(
+                    ok=True,
+                    image_path=output_path,
+                    artifact_paths=(output_path,),
+                    backend="matplotlib",
+                    metadata={"output_path": str(output_path)},
+                )
+
+        renderer = CapturingRenderer()
+        pipeline = ChartGenerationPipeline(
+            code_generator=StaticChartCodeGenerator(STATIC_BAR_CODE),
+            verifier_pipeline=GroundedChartPipeline(parser=HeuristicIntentParser()),
+            renderer=renderer,
+        )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            result = pipeline.run(
+                query="Create a bar chart of sales by product titled Sales by product.",
+                schema=TableSchema(columns={"product": "string", "sales": "number"}),
+                rows=(
+                    {"product": "A", "sales": 3},
+                    {"product": "B", "sales": 5},
+                ),
+                output_dir=Path(output_tmp),
+                case_id="renderer_globals",
+            )
+
+            self.assertTrue(result.render_result.ok)
+            self.assertIsNotNone(renderer.globals_dict)
+            self.assertIn("artifact_workspace", renderer.globals_dict)
+            self.assertEqual(str(Path(output_tmp).resolve()), renderer.globals_dict["artifact_workspace"]["root"])
+
     def test_one_shot_repaired_code_is_reverified_before_final_render(self):
         class OneShotRepairer:
             def __init__(self):
@@ -138,7 +179,7 @@ class ChartGenerationPipelineTest(unittest.TestCase):
             def __init__(self):
                 self.calls = 0
 
-            def render(self, code, *, rows, output_dir, output_filename="figure.png", file_path=None):
+            def render(self, code, *, rows, output_dir, output_filename="figure.png", file_path=None, globals_dict=None):
                 self.calls += 1
                 output_path = Path(output_dir) / output_filename
                 if "bad_bbox_marker" in code:
@@ -217,7 +258,7 @@ class ChartGenerationPipelineTest(unittest.TestCase):
             def __init__(self):
                 self.calls = 0
 
-            def render(self, code, *, rows, output_dir, output_filename="figure.png", file_path=None):
+            def render(self, code, *, rows, output_dir, output_filename="figure.png", file_path=None, globals_dict=None):
                 self.calls += 1
                 output_path = Path(output_dir) / output_filename
                 if "bbox_inches=\"tight\"" in code:

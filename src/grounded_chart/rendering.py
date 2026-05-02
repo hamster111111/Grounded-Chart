@@ -42,6 +42,7 @@ class ChartImageRenderer:
         output_dir: str | Path,
         output_filename: str = "figure.png",
         file_path: str | Path | None = None,
+        globals_dict: dict[str, Any] | None = None,
     ) -> ChartRenderResult:
         output_root = Path(output_dir).resolve()
         output_root.mkdir(parents=True, exist_ok=True)
@@ -57,6 +58,8 @@ class ChartImageRenderer:
             "rows": [dict(row) for row in rows],
             "OUTPUT_PATH": str(output_path),
         }
+        if globals_dict:
+            exec_globals.update(dict(globals_dict))
 
         try:
             with _pushd(output_root), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
