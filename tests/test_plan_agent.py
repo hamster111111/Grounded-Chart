@@ -1,7 +1,11 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
 
 from grounded_chart.plan_agent import LLMPlanAgent, PlanAgentRequest
 from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.construction_plan import ChartConstructionPlan, VisualLayerPlan, VisualPanelPlan
 
 
 class LLMPlanAgentTest(unittest.TestCase):
@@ -166,6 +170,160 @@ class LLMPlanAgentTest(unittest.TestCase):
         self.assertIn("Do not invent hard numeric bounds", client.system_prompt)
         self.assertIn("ExecutorAgent is responsible for computing concrete", client.system_prompt)
         self.assertIn("Do not output numeric panel bounds", client.user_prompt)
+
+    def test_llm_plan_agent_writes_file_backed_workspace(self):
+        class FakeClient:
+            def complete_json_with_trace(self, **kwargs):
+                return LLMJsonResult(
+                    payload={
+                        "agent_name": "workspace_plan_agent",
+                        "construction_plan": {
+                            "plan_type": "chart_construction_plan_v2",
+                            "layout_strategy": "single_panel",
+                            "figure_size": [8, 4],
+                            "panels": [
+                                {
+                                    "panel_id": "panel.main",
+                                    "role": "main_chart",
+                                    "layers": [
+                                        {
+                                            "layer_id": "layer.bar",
+                                            "chart_type": "bar",
+                                            "role": "main_bar_layer",
+                                            "x": "product",
+                                            "y": ["sales"],
+                                        }
+                                    ],
+                                }
+                            ],
+                            "global_elements": [],
+                            "decisions": [],
+                            "assumptions": [],
+                            "constraints": [],
+                            "data_transform_plan": [],
+                            "execution_steps": [],
+                            "style_policy": {},
+                        },
+                        "feedback_resolution": [],
+                    },
+                    trace=LLMCompletionTrace(model="fake-model", raw_text="{}"),
+                )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            result = LLMPlanAgent(FakeClient()).build_plan(
+                PlanAgentRequest(query="plot sales", case_id="case_a", output_root=Path(output_tmp))
+            )
+            workspace = Path(output_tmp) / "PlanAgent" / "round_1"
+
+            self.assertTrue((workspace / "input_manifest.json").exists())
+            self.assertTrue((workspace / "prompt_payload.json").exists())
+            self.assertTrue((workspace / "plan.json").exists())
+            self.assertTrue((workspace / "task_memory.json").exists())
+            self.assertTrue((workspace / "self_check.json").exists())
+            self.assertEqual(str(workspace), result.metadata["workspace_dir"])
+            self.assertEqual("file_backed", result.metadata["state_mode"])
+            self.assertTrue(result.metadata["self_check_ok"])
+
+    def test_round_two_loads_previous_memory_and_compacts_previous_plan(self):
+        class CapturingClient:
+            def __init__(self):
+                self.user_prompt = ""
+
+            def complete_json_with_trace(self, **kwargs):
+                self.user_prompt = kwargs["user_prompt"]
+                return LLMJsonResult(
+                    payload={
+                        "agent_name": "workspace_plan_agent",
+                        "construction_plan": {
+                            "plan_type": "chart_construction_plan_v2",
+                            "layout_strategy": "replanned",
+                            "figure_size": [8, 4],
+                            "panels": [
+                                {
+                                    "panel_id": "panel.main",
+                                    "role": "main_chart",
+                                    "layers": [
+                                        {
+                                            "layer_id": "layer.line",
+                                            "chart_type": "line",
+                                            "role": "main_line_layer",
+                                            "x": "year",
+                                            "y": ["value"],
+                                        }
+                                    ],
+                                }
+                            ],
+                            "global_elements": [],
+                            "decisions": [],
+                            "assumptions": [],
+                            "constraints": [],
+                            "data_transform_plan": [],
+                            "execution_steps": [],
+                            "style_policy": {},
+                        },
+                        "feedback_resolution": [
+                            {
+                                "issue_id": "fb_layout",
+                                "status": "addressed",
+                                "plan_change": "Use replanned layout.",
+                                "affected_plan_refs": ["panels.panel.main"],
+                            }
+                        ],
+                    },
+                    trace=LLMCompletionTrace(model="fake-model", raw_text="{}"),
+                )
+
+        previous_plan = ChartConstructionPlan(
+            plan_type="chart_construction_plan_v2",
+            layout_strategy="initial",
+            panels=(
+                VisualPanelPlan(
+                    panel_id="panel.main",
+                    role="main_chart",
+                    layers=(
+                        VisualLayerPlan(
+                            layer_id="layer.line",
+                            chart_type="line",
+                            role="main_line_layer",
+                            x="year",
+                            y=("value",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            first_client = CapturingClient()
+            LLMPlanAgent(first_client).build_plan(
+                PlanAgentRequest(query="plot trend", case_id="case_b", output_root=Path(output_tmp), round_index=1)
+            )
+            second_client = CapturingClient()
+            LLMPlanAgent(second_client).build_plan(
+                PlanAgentRequest(
+                    query="plot trend",
+                    case_id="case_b",
+                    output_root=Path(output_tmp),
+                    round_index=2,
+                    context={"plan_replanning": {"previous_construction_plan": previous_plan.to_dict(), "feedback_bundle": {"feedback_items": [{"issue_id": "nested"}]}}},
+                    previous_plan=previous_plan,
+                    feedback_bundle={
+                        "feedback_items": [
+                            {"issue_id": "fb_layout", "evidence": "Legend overlaps chart."}
+                        ]
+                    },
+                )
+            )
+            payload = json.loads(second_client.user_prompt.split("\n", 1)[1])
+
+            self.assertIn("loaded_memory", payload)
+            self.assertEqual("replanned", json.loads((Path(output_tmp) / "PlanAgent" / "round_2" / "plan.json").read_text(encoding="utf-8"))["layout_strategy"])
+            self.assertEqual("initial", payload["previous_plan_summary"]["layout_strategy"])
+            self.assertNotIn("previous_plan", payload)
+            self.assertNotIn("previous_construction_plan", payload["context"]["plan_replanning"])
+            self.assertNotIn("feedback_bundle", payload["context"]["plan_replanning"])
+            self.assertIn("previous_plan_summary", payload["context"]["plan_replanning"])
+            self.assertIn("feedback_summary", payload["context"]["plan_replanning"])
 
 
 if __name__ == "__main__":

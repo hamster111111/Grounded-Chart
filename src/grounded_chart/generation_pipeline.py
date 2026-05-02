@@ -168,6 +168,8 @@ class ChartGenerationPipeline:
         plan_agent_result = self._build_plan_with_agent(
             PlanAgentRequest(
                 query=query,
+                case_id=case_id,
+                output_root=output_root,
                 requirement_plan=parsed.requirement_plan,
                 source_data_plan=source_plan,
                 source_data_execution=source_execution,
@@ -724,6 +726,8 @@ class ChartGenerationPipeline:
             revised_plan_agent_result = self._build_plan_with_agent(
                 PlanAgentRequest(
                     query=query,
+                    case_id=case_id,
+                    output_root=output_root,
                     requirement_plan=parsed.requirement_plan,
                     source_data_plan=source_plan,
                     source_data_execution=source_execution,

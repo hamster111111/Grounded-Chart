@@ -242,6 +242,31 @@ The PlanAgent should not normally author exact normalized bounds unless the user
 
 The ExecutorAgent computes concrete plotting coordinates from these semantic layout contracts because it has access to the actual plotting backend, figure size, axes construction, legends, titles, and rendered elements.
 
+### File-Backed PlanAgent State
+
+The PlanAgent should behave as a real planning agent rather than a stateless prompt function. Its state must be explicit, file-backed, and reproducible. For each planning round, it should own a workspace such as:
+
+- `PlanAgent/round_1/input_manifest.json`
+- `PlanAgent/round_1/source_cards.json`
+- `PlanAgent/round_1/requirement_index.json`
+- `PlanAgent/round_1/prompt_payload.json`
+- `PlanAgent/round_1/plan.json`
+- `PlanAgent/round_1/feedback_resolution.json`
+- `PlanAgent/round_1/self_check.json`
+- `PlanAgent/round_1/task_memory.json`
+
+This is not hidden model memory. The agent wrapper reads and writes compact state so later rounds can reuse stable facts without repeatedly placing the full source execution, previous plan, and full pipeline context into the LLM prompt.
+
+For replanning rounds, the PlanAgent should receive:
+
+- compact task memory from the previous round
+- source cards rather than full source tables
+- a requirement index rather than raw unstructured context
+- a previous-plan summary rather than the full previous construction plan
+- the current feedback bundle as the main change signal
+
+The PlanAgent should also run a lightweight self-check over its output before the ExecutorAgent sees it. The check should cover at least panel/layer presence, feedback-resolution completeness, unjustified numeric bounds, and vague layout language. This self-check is not a final verifier; it is planning-stage evidence that makes PlanAgent behavior inspectable and reduces token pressure in multi-round runs.
+
 ### ExecutorAgent Fidelity Contract
 
 The ExecutorAgent is not another free-form chart generator. It should strictly implement the construction plan:
