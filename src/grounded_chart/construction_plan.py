@@ -1046,9 +1046,9 @@ def _execution_steps(
                 "stage": "execution",
                 "action": "load_and_summarize_sources",
                 "inputs": files,
-                "outputs": ["execution/round_1/step_01_sources_summary.json"],
+                "outputs": ["ExecutorAgent/round_1/step_01_sources_summary.json"],
                 "purpose": "Load source files deterministically and expose schema/row counts before plotting.",
-                "script": "execution/round_1/step_01_load_sources.py",
+                "script": "ExecutorAgent/round_1/step_01_load_sources.py",
             }
         )
     if "waterfall" in chart_types:
@@ -1063,7 +1063,7 @@ def _execution_steps(
                 "inputs": [source],
                 "outputs": ["artifact_role=source_values", "artifact_role=waterfall_geometry"],
                 "purpose": "Prepare source values and protocol-grounded bar geometry for the waterfall layer.",
-                "script": "execution/round_1/transform_waterfall.py",
+                "script": "ExecutorAgent/round_1/transform_waterfall.py",
                 "assertions": [
                     "row_count equals source row_count",
                     f"{x_column} values are sorted ascending" if x_column else "x values preserve source order",
@@ -1088,7 +1088,7 @@ def _execution_steps(
                 "inputs": [source],
                 "outputs": ["artifact_role=area_fill_geometry"],
                 "purpose": "Prepare source series values and modifier-grounded fill geometry for the area layer.",
-                "script": "execution/round_1/transform_area.py",
+                "script": "ExecutorAgent/round_1/transform_area.py",
                 "semantic_modifiers": area_modifiers,
                 "assertions": [
                     f"area series {series_columns} equal source values row by row",
@@ -1113,7 +1113,7 @@ def _execution_steps(
                 "inputs": [source],
                 "outputs": ["artifact_role=categorical_values"],
                 "purpose": "Prepare category/value rows for each requested categorical inset chart.",
-                "script": "execution/round_1/transform_categorical.py",
+                "script": "ExecutorAgent/round_1/transform_categorical.py",
                 "assertions": [
                     f"only requested {anchor_column} values are included",
                     f"{category} labels are preserved",
@@ -1129,9 +1129,9 @@ def _execution_steps(
                 "stage": "execution",
                 "action": "plot_from_prepared_artifacts",
                 "inputs": ["artifact_workspace required_for_plotting CSV artifacts"],
-                "outputs": ["execution/round_1/plot_spec.md", "execution/round_1/plot.py", "figure.png"],
+                "outputs": ["ExecutorAgent/round_1/plot_spec.md", "ExecutorAgent/round_1/plot.py", "figure.png"],
                 "purpose": "Render the final figure using prepared artifacts rather than recomputing hidden transformations inside plotting code.",
-                "script": "execution/round_1/plot.py",
+                "script": "ExecutorAgent/round_1/plot.py",
             }
         )
     return steps

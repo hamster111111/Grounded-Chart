@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
 
-from grounded_chart.artifact_workspace import ArtifactWorkspaceBuilder
+from grounded_chart.artifact_workspace import ArtifactWorkspaceBuilder, LAYOUT_AGENT_DIR
 from grounded_chart.chart_protocol import ChartProtocolAgent
 from grounded_chart.codegen import ChartCodeGeneration, ChartCodeGenerationRequest, ChartCodeGenerator
 from grounded_chart.construction_plan import HeuristicChartConstructionPlanner, PlanDecision, validate_construction_plan
@@ -1354,12 +1354,12 @@ def _write_replan_feedback_artifacts(
     combined_critique: LayoutCritique,
     feedback_bundle: dict[str, Any],
 ) -> dict[str, str]:
-    repair_dir = Path(output_root).resolve() / "repair" / f"layout_round_{round_index}"
-    repair_dir.mkdir(parents=True, exist_ok=True)
-    critique_path = repair_dir / "layout_critique.json"
-    combined_path = repair_dir / "combined_replanning_critique.json"
-    feedback_path = repair_dir / "feedback_bundle.json"
-    trace_path = repair_dir / "replan_trace.json"
+    agent_dir = Path(output_root).resolve() / LAYOUT_AGENT_DIR / f"round_{round_index}"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    critique_path = agent_dir / "layout_critique.json"
+    combined_path = agent_dir / "combined_replanning_critique.json"
+    feedback_path = agent_dir / "feedback_bundle.json"
+    trace_path = agent_dir / "replan_trace.json"
     critique_path.write_text(json.dumps(critique.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     combined_path.write_text(json.dumps(combined_critique.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     feedback_path.write_text(json.dumps(feedback_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1378,7 +1378,7 @@ def _write_replan_feedback_artifacts(
         encoding="utf-8",
     )
     return {
-        "repair_dir": str(repair_dir),
+        "agent_dir": str(agent_dir),
         "layout_critique_path": str(critique_path),
         "combined_critique_path": str(combined_path),
         "feedback_bundle_path": str(feedback_path),

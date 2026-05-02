@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from grounded_chart.artifact_workspace import FIGURE_READER_AGENT_DIR
 from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMUsage
 from grounded_chart.plan_feedback import normalize_figure_plan_feedback
 from grounded_chart.source_data import parse_scalar, short_cell
@@ -184,9 +185,9 @@ def write_figure_audit_artifact(
     round_index: int,
     audit: FigureAudit,
 ) -> str:
-    repair_dir = Path(output_root).resolve() / "repair" / f"layout_round_{round_index}"
-    repair_dir.mkdir(parents=True, exist_ok=True)
-    audit_path = repair_dir / "figure_audit.json"
+    agent_dir = Path(output_root).resolve() / FIGURE_READER_AGENT_DIR / f"round_{round_index}"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = agent_dir / "figure_audit.json"
     audit_path.write_text(json.dumps(audit.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     return str(audit_path)
 

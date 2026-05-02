@@ -115,7 +115,7 @@ def _codegen_system_prompt() -> str:
         "When context.layout_replanning is provided, this is a PlanAgent replanning round: preserve source-grounded data and explicit requirements, but make concrete rendered changes required by layout_replanning.feedback_bundle. "
         "Do not satisfy replanning feedback by changing only comments, metadata, or artifact round paths. "
         "In layout_replanning mode, do not change source file reads, prepared artifact paths, deterministic data transformations, plotted values, source files, required labels, or required legend categories. "
-        "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared plotting CSV artifacts using each artifact's `relative_path` (for example execution/round_1/artifact_*.csv), not a bare filename. "
+        "When artifact_workspace is provided, treat its listed plan_dir and execution_dir as the working protocol; the final plot code must read prepared plotting CSV artifacts using each artifact's `relative_path` (for example ExecutorAgent/round_1/artifact_*.csv), not a bare filename. "
         "Resolve prepared artifact paths relative to Path(OUTPUT_PATH).parent, e.g. Path(OUTPUT_PATH).parent / relative_path; do not join artifact filenames directly to output_dir or infer execution_dir from OUTPUT_PATH parents. "
         "The runtime may also expose a global `artifact_workspace` object, but code must still use artifact relative_path so exported code stays portable. "
         "The final plot code must not recompute prepared plotted values from raw source CSVs. "

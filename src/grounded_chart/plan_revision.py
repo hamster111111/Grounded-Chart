@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from grounded_chart.construction_plan import ChartConstructionPlan, PlanDecision, VisualPanelPlan
+from grounded_chart.artifact_workspace import PLAN_REVISION_AGENT_DIR
 from grounded_chart.layout_critic import LayoutCritique
 from grounded_chart.plan_feedback import plan_updates_from_feedback
 
@@ -236,16 +237,16 @@ def write_plan_revision_artifacts(
     critique: LayoutCritique,
     revision: PlanRevisionResult,
 ) -> dict[str, str]:
-    repair_dir = Path(output_root).resolve() / "repair" / f"layout_round_{round_index}"
-    repair_dir.mkdir(parents=True, exist_ok=True)
-    critique_path = repair_dir / "layout_critique.json"
-    revision_path = repair_dir / "plan_revision.json"
-    revised_plan_path = repair_dir / "revised_plan.json"
+    agent_dir = Path(output_root).resolve() / PLAN_REVISION_AGENT_DIR / f"round_{round_index}"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    critique_path = agent_dir / "layout_critique.json"
+    revision_path = agent_dir / "plan_revision.json"
+    revised_plan_path = agent_dir / "revised_plan.json"
     critique_path.write_text(json.dumps(critique.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     revision_path.write_text(json.dumps(revision.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     revised_plan_path.write_text(json.dumps(revision.revised_plan.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     return {
-        "repair_dir": str(repair_dir),
+        "agent_dir": str(agent_dir),
         "layout_critique_path": str(critique_path),
         "plan_revision_path": str(revision_path),
         "revised_plan_path": str(revised_plan_path),

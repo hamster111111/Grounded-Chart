@@ -331,7 +331,7 @@ class ChartGenerationPipelineTest(unittest.TestCase):
 import pandas as pd
 import matplotlib.pyplot as plt
 
-prepared = pd.read_csv('execution/round_1/step_02_imports_waterfall_render_table.csv')
+prepared = pd.read_csv('ExecutorAgent/round_1/step_02_imports_waterfall_render_table.csv')
 fig, ax = plt.subplots(figsize=(4, 3))
 ax.bar(prepared['x_position'], prepared['bar_height'], bottom=prepared['bar_bottom'], width=prepared['bar_width'])
 ax.set_title('Imports')
@@ -374,12 +374,12 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertTrue((Path(output_tmp) / "construction_plan_validation_report.json").exists())
             self.assertTrue(manifest["metadata"]["artifact_workspace_ok"])
             self.assertTrue((Path(output_tmp) / "artifact_workspace_manifest.json").exists())
-            self.assertTrue((Path(output_tmp) / "plan" / "round_1" / "plan.json").exists())
-            self.assertTrue((Path(output_tmp) / "plan" / "round_1" / "plan.md").exists())
-            self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "steps.md").exists())
-            self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "step_01_sources_summary.json").exists())
-            self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "chart_protocols" / "waterfall_protocol.json").exists())
-            self.assertTrue((Path(output_tmp) / "execution" / "round_1" / "step_02_imports_waterfall_render_table.csv").exists())
+            self.assertTrue((Path(output_tmp) / "PlanAgent" / "round_1" / "plan.json").exists())
+            self.assertTrue((Path(output_tmp) / "PlanAgent" / "round_1" / "plan.md").exists())
+            self.assertTrue((Path(output_tmp) / "ExecutorAgent" / "round_1" / "steps.md").exists())
+            self.assertTrue((Path(output_tmp) / "ExecutorAgent" / "round_1" / "step_01_sources_summary.json").exists())
+            self.assertTrue((Path(output_tmp) / "ExecutorAgent" / "round_1" / "chart_protocols" / "waterfall_protocol.json").exists())
+            self.assertTrue((Path(output_tmp) / "ExecutorAgent" / "round_1" / "step_02_imports_waterfall_render_table.csv").exists())
             artifact_workspace = json.loads((Path(output_tmp) / "artifact_workspace_manifest.json").read_text(encoding="utf-8"))
             render_artifact = next(
                 item
@@ -398,7 +398,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('execution/round_1/step_02_imports_waterfall_render_table.csv')
+df = pd.read_csv('ExecutorAgent/round_1/step_02_imports_waterfall_render_table.csv')
 fig, ax = plt.subplots(figsize=(4, 3))
 ax.bar(df['x_position'], df['bar_height'], bottom=df['bar_bottom'], width=df['bar_width'])
 ax.set_title('Imports')
@@ -427,7 +427,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
                 verification_mode="figure_only",
             )
 
-            artifact_path = Path(output_tmp) / "execution" / "round_1" / "step_02_imports_waterfall_values.csv"
+            artifact_path = Path(output_tmp) / "ExecutorAgent" / "round_1" / "step_02_imports_waterfall_values.csv"
             self.assertTrue(result.render_result.ok)
             with artifact_path.open("r", encoding="utf-8", newline="") as handle:
                 rows = list(csv.DictReader(handle))
@@ -438,7 +438,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertEqual("-2", row_2001["Rural"])
             self.assertEqual("-2", row_2001["Rural_plot"])
 
-            render_artifact_path = Path(output_tmp) / "execution" / "round_1" / "step_02_imports_waterfall_render_table.csv"
+            render_artifact_path = Path(output_tmp) / "ExecutorAgent" / "round_1" / "step_02_imports_waterfall_render_table.csv"
             with render_artifact_path.open("r", encoding="utf-8", newline="") as handle:
                 render_rows = list(csv.DictReader(handle))
             urban_2001 = next(row for row in render_rows if row["Year"] == "2001" and row["series"] == "Urban")
@@ -533,7 +533,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
 import pandas as pd
 import matplotlib.pyplot as plt
 
-area = pd.read_csv('execution/round_1/step_03_consumption_area_values.csv')
+area = pd.read_csv('ExecutorAgent/round_1/step_03_consumption_area_values.csv')
 fig, ax = plt.subplots(figsize=(4, 3))
 ax.fill_between(area['x_index'], area['Urban_fill_bottom'], area['Urban_fill_top'])
 ax.fill_between(area['x_index'], area['Rural_fill_bottom'], area['Rural_fill_top'])
@@ -579,7 +579,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             )
             self.assertEqual("overlap", area_layer["semantic_modifiers"]["composition"])
             self.assertEqual({"type": "explicit_range", "min": 35.0, "max": 105.0}, area_layer["semantic_modifiers"]["scale_policy"])
-            artifact_path = Path(output_tmp) / "execution" / "round_1" / "step_03_consumption_area_values.csv"
+            artifact_path = Path(output_tmp) / "ExecutorAgent" / "round_1" / "step_03_consumption_area_values.csv"
             with artifact_path.open("r", encoding="utf-8", newline="") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual("overlap", rows[0]["composition_policy"])
@@ -662,11 +662,11 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertTrue(result.metadata["layout_replanning_accepted"])
             self.assertEqual(1, result.metadata["layout_replanning_rounds"])
             self.assertEqual("layout_replan_round_1", result.metadata["final_code_source"])
-            self.assertTrue((Path(output_tmp) / "repair" / "layout_round_1" / "layout_critique.json").exists())
-            self.assertTrue((Path(output_tmp) / "repair" / "layout_round_1" / "feedback_bundle.json").exists())
-            self.assertTrue((Path(output_tmp) / "repair" / "layout_round_1" / "replan_trace.json").exists())
-            self.assertTrue((Path(output_tmp) / "plan" / "round_2" / "plan.json").exists())
-            self.assertTrue((Path(output_tmp) / "execution" / "round_2" / "steps.md").exists())
+            self.assertTrue((Path(output_tmp) / "LayoutAgent" / "round_1" / "layout_critique.json").exists())
+            self.assertTrue((Path(output_tmp) / "LayoutAgent" / "round_1" / "feedback_bundle.json").exists())
+            self.assertTrue((Path(output_tmp) / "LayoutAgent" / "round_1" / "replan_trace.json").exists())
+            self.assertTrue((Path(output_tmp) / "PlanAgent" / "round_2" / "plan.json").exists())
+            self.assertTrue((Path(output_tmp) / "ExecutorAgent" / "round_2" / "steps.md").exists())
             self.assertEqual(Path(output_tmp).resolve() / "round2.png", result.image_path)
             self.assertTrue((Path(output_tmp) / "round1.png").exists())
             self.assertTrue((Path(output_tmp) / "round2.png").exists())
@@ -679,7 +679,7 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             )
             self.assertIn(
                 "Replan Feedback",
-                (Path(output_tmp) / "plan" / "round_2" / "plan.md").read_text(encoding="utf-8"),
+                (Path(output_tmp) / "PlanAgent" / "round_2" / "plan.md").read_text(encoding="utf-8"),
             )
             manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
             self.assertTrue(manifest["metadata"]["layout_replanning_accepted"])
@@ -856,8 +856,8 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             records_by_round = manifest["metadata"]["executor_layout_records_by_round"]
             round1_layout_path = Path(records_by_round["round_1"]["computed_layout_json"])
             round2_layout_path = Path(records_by_round["round_2"]["computed_layout_json"])
-            self.assertEqual(Path(output_tmp) / "execution" / "round_1" / "computed_layout.json", round1_layout_path)
-            self.assertEqual(Path(output_tmp) / "execution" / "round_2" / "computed_layout.json", round2_layout_path)
+            self.assertEqual(Path(output_tmp) / "ExecutorAgent" / "round_1" / "computed_layout.json", round1_layout_path)
+            self.assertEqual(Path(output_tmp) / "ExecutorAgent" / "round_2" / "computed_layout.json", round2_layout_path)
             self.assertEqual({"layout_round": "round_1"}, json.loads(round1_layout_path.read_text(encoding="utf-8")))
             self.assertEqual({"layout_round": "round_2"}, json.loads(round2_layout_path.read_text(encoding="utf-8")))
             self.assertEqual(
@@ -944,14 +944,14 @@ fig.savefig(OUTPUT_PATH, bbox_inches='tight')
             self.assertEqual(1, reader.calls)
             self.assertTrue(result.metadata["figure_reader_enabled"])
             self.assertFalse(result.metadata["layout_replanning_accepted"])
-            audit_path = Path(output_tmp) / "repair" / "layout_round_1" / "figure_audit.json"
+            audit_path = Path(output_tmp) / "FigureReaderAgent" / "round_1" / "figure_audit.json"
             self.assertTrue(audit_path.exists())
             audit_payload = json.loads(audit_path.read_text(encoding="utf-8"))
             self.assertEqual("Series and color role are visually ambiguous.", audit_payload["summary"])
-            layout_critique_path = Path(output_tmp) / "repair" / "layout_round_1" / "layout_critique.json"
+            layout_critique_path = Path(output_tmp) / "LayoutAgent" / "round_1" / "layout_critique.json"
             layout_critique_payload = json.loads(layout_critique_path.read_text(encoding="utf-8"))
             self.assertTrue(layout_critique_payload["ok"])
-            combined_path = Path(output_tmp) / "repair" / "layout_round_1" / "combined_replanning_critique.json"
+            combined_path = Path(output_tmp) / "LayoutAgent" / "round_1" / "combined_replanning_critique.json"
             self.assertTrue(combined_path.exists())
             context = generator.requests[1].context["layout_replanning"]
             self.assertEqual("bounded_visual_presentation_and_encoding", context["allowed_edit_scope"])

@@ -11,6 +11,27 @@ from grounded_chart.construction_plan import ChartConstructionPlan, PlanValidati
 from grounded_chart.source_data import SourceDataExecution, SourceDataPlan
 
 
+PLAN_AGENT_DIR = "PlanAgent"
+EXECUTOR_AGENT_DIR = "ExecutorAgent"
+REPAIR_AGENT_DIR = "RepairAgent"
+LAYOUT_AGENT_DIR = "LayoutAgent"
+FIGURE_READER_AGENT_DIR = "FigureReaderAgent"
+PLAN_REVISION_AGENT_DIR = "PlanRevisionAgent"
+
+_WORKSPACE_RELATIVE_PATH_ANCHORS = {
+    PLAN_AGENT_DIR,
+    EXECUTOR_AGENT_DIR,
+    REPAIR_AGENT_DIR,
+    LAYOUT_AGENT_DIR,
+    FIGURE_READER_AGENT_DIR,
+    PLAN_REVISION_AGENT_DIR,
+    # Legacy output roots remain readable in old manifests and tests.
+    "plan",
+    "execution",
+    "repair",
+}
+
+
 @dataclass(frozen=True)
 class ArtifactWorkspace:
     root: Path
@@ -187,10 +208,10 @@ class _GeneratedArtifacts:
 
 def create_artifact_workspace(output_root: str | Path, *, round_id: str = "round_1") -> ArtifactWorkspace:
     root = Path(output_root).resolve()
-    plan_dir = root / "plan" / round_id
-    execution_dir = root / "execution" / round_id
-    repair_dir = root / "repair" / round_id
-    for path in (plan_dir, execution_dir, repair_dir):
+    plan_dir = root / PLAN_AGENT_DIR / round_id
+    execution_dir = root / EXECUTOR_AGENT_DIR / round_id
+    repair_dir = root / REPAIR_AGENT_DIR / round_id
+    for path in (plan_dir, execution_dir):
         path.mkdir(parents=True, exist_ok=True)
     return ArtifactWorkspace(root=root, plan_dir=plan_dir, execution_dir=execution_dir, repair_dir=repair_dir, round_id=round_id)
 
@@ -336,7 +357,7 @@ def render_plan_markdown(
 
 def render_execution_steps_markdown(construction_plan: ChartConstructionPlan) -> str:
     lines = [
-        "# Execution Round 1 Steps",
+        "# ExecutorAgent Round Steps",
         "",
         "ExecutorAgent must implement these steps through explicit scripts/artifacts. Plotting code should read prepared artifacts rather than hiding transformations inside plot calls.",
         "",
@@ -401,7 +422,7 @@ def render_plot_spec_markdown(
     protocols: tuple[dict[str, Any], ...] = (),
 ) -> str:
     lines = [
-        "# Plot Spec Round 1",
+        "# ExecutorAgent Plot Spec",
         "",
         "The final plotting code must consume prepared CSV artifacts from this execution round.",
         "",
@@ -417,7 +438,7 @@ def render_plot_spec_markdown(
         [
             "",
             "## Chart Protocols",
-            "- chart protocols in execution/round_1/chart_protocols/ define chart-type-specific rendering semantics.",
+            "- chart protocols in the current ExecutorAgent round's chart_protocols/ directory define chart-type-specific rendering semantics.",
             "- hard_fidelity protocol commitments must be followed for source-grounded data, deterministic geometry, explicit requirements, and semantic channel bindings.",
             "- soft_guidance commitments should improve readability and may feed visual feedback/replanning, but should not override hard fidelity.",
             "- free_design commitments are delegated to ExecutorAgent unless the source request explicitly constrains them.",
@@ -1184,7 +1205,7 @@ def _artifact_schema(path: Path) -> dict[str, Any]:
 def _workspace_relative_path(path: Path) -> str:
     parts = path.parts
     for index, part in enumerate(parts):
-        if part in {"plan", "execution", "repair"}:
+        if part in _WORKSPACE_RELATIVE_PATH_ANCHORS:
             return str(Path(*parts[index:])).replace("\\", "/")
     return path.name
 
