@@ -18,15 +18,15 @@ class FakeVisionClient:
         return LLMJsonResult(
             payload={
                 "ok": False,
-                "failed_contracts": ["layout.no_occlusion"],
-                "diagnosis": "Inset overlaps the main plotting region.",
-                "recommended_plan_updates": [
+                "summary": "Inset overlaps the main plotting region.",
+                "issues": [
                     {
-                        "target": "panel.pie_2002",
-                        "field": "bounds",
-                        "operation": "set",
-                        "value": [0.12, 0.82, 0.1, 0.1],
-                        "reason": "Move inset into a readable top band.",
+                        "issue_type": "inset_overlap",
+                        "severity": "high",
+                        "evidence": "Inset overlaps the main plotting region.",
+                        "affected_region": "top band",
+                        "related_plan_ref": "panel.pie_2002",
+                        "recommendation": "Move inset into a readable non-overlapping top band.",
                     }
                 ],
                 "confidence": 0.82,
@@ -52,20 +52,21 @@ class VLMLayoutAgentTest(unittest.TestCase):
             )
 
         self.assertFalse(critique.ok)
-        self.assertEqual(("layout.no_occlusion",), critique.failed_contracts)
+        self.assertEqual(("layout.inset_overlap",), critique.failed_contracts)
         self.assertEqual("vlm", critique.metadata["mode"])
+        self.assertEqual("image_and_original_task_only", critique.metadata["input_policy"])
         self.assertEqual(image_path, client.calls[0]["image_path"])
         self.assertIn("rendered chart", client.calls[0]["system_prompt"].lower())
-        self.assertIn("construction_plan_layout", client.calls[0]["user_prompt"])
+        user_prompt = client.calls[0]["user_prompt"]
+        self.assertIn("original_task", user_prompt)
+        self.assertNotIn("construction_plan_layout", user_prompt)
+        self.assertNotIn("generated_code_layout_excerpt", user_prompt)
+        self.assertNotIn("actual_figure_layout_trace", user_prompt)
         feedback = critique.normalized_plan_feedback()
         self.assertEqual("PlanAgent", feedback[0]["suggested_plan_action"]["target_agent"])
+        self.assertEqual("error", feedback[0]["severity"])
         self.assertEqual("panel.pie_2002", feedback[0]["suggested_plan_action"]["target_ref"])
-        self.assertEqual("layout_notes", feedback[0]["suggested_plan_action"]["legacy_plan_update"]["field"])
-        self.assertEqual("bounds", feedback[0]["suggested_plan_action"]["legacy_plan_update"]["legacy_field_suppressed"])
-        self.assertIn(
-            "ExecutorAgent during figure execution",
-            feedback[0]["suggested_plan_action"]["legacy_plan_update"]["value"][0],
-        )
+        self.assertEqual("revise_layout_contract", feedback[0]["suggested_plan_action"]["action_type"])
 
 
 if __name__ == "__main__":
