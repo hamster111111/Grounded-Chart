@@ -1,6 +1,6 @@
 ﻿import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     ArtistTrace,
     AxisRequirementSpec,
     FigureTrace,
@@ -13,9 +13,9 @@ from grounded_chart import (
     ParsedRequirementBundle,
     TableSchema,
 )
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
-from grounded_chart.evidence import attach_figure_requirements, merge_expected_figure_specs
-from grounded_chart.schema import AxisTrace, ChartIntentPlan
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.verification.evidence import attach_figure_requirements, merge_expected_figure_specs
+from grounded_chart.core.schema import AxisTrace, ChartIntentPlan
 
 
 class StaticParsedBundleParser:

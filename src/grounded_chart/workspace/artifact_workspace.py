@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from grounded_chart.agents.protocol import ChartProtocolAgent, ChartRenderingProtocol, validate_protocol
-from grounded_chart.construction_plan import ChartConstructionPlan, PlanValidationReport
-from grounded_chart.source_data import SourceDataExecution, SourceDataPlan
+from grounded_chart.core.construction_plan import ChartConstructionPlan, PlanValidationReport
+from grounded_chart.data.source_data import SourceDataExecution, SourceDataPlan
 
 
 PLAN_AGENT_DIR = "PlanAgent"

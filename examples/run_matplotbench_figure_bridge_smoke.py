@@ -11,8 +11,8 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import LLMIntentParser, OpenAICompatibleLLMClient, TableSchema, derive_expected_figure, extract_expected_trace_from_texts, load_ablation_run_config
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.api import LLMIntentParser, OpenAICompatibleLLMClient, TableSchema, derive_expected_figure, extract_expected_trace_from_texts, load_ablation_run_config
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 from grounded_chart_adapters import ChartCase, InMemoryCaseAdapter, write_batch_report_html
 
 
@@ -130,7 +130,7 @@ def main() -> None:
 
 
 def _build_pipeline(parser: LLMIntentParser):
-    from grounded_chart import GroundedChartPipeline
+    from grounded_chart.api import GroundedChartPipeline
 
     return GroundedChartPipeline(
         parser=parser,

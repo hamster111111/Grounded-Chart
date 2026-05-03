@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart.figure_reader import FigureAudit, VLMFigureReaderAgent, figure_audit_plan_feedback, normalized_figure_audit_notes
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
-from grounded_chart.rendering import ChartRenderResult
-from grounded_chart.source_data import SourceDataPlanner
+from grounded_chart.agents.figure_reader import FigureAudit, VLMFigureReaderAgent, figure_audit_plan_feedback, normalized_figure_audit_notes
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.runtime.rendering import ChartRenderResult
+from grounded_chart.data.source_data import SourceDataPlanner
 
 
 class FakeVisionClient:

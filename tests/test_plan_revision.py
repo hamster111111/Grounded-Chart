@@ -1,8 +1,8 @@
 import unittest
 
-from grounded_chart.construction_plan import ChartConstructionPlan, VisualPanelPlan
-from grounded_chart.layout_critic import LayoutCritique
-from grounded_chart.plan_revision import LayoutOnlyPlanRevisionAgent
+from grounded_chart.core.construction_plan import ChartConstructionPlan, VisualPanelPlan
+from grounded_chart.agents.layout import LayoutCritique
+from grounded_chart.agents.plan_revision import LayoutOnlyPlanRevisionAgent
 
 
 class LayoutOnlyPlanRevisionAgentTest(unittest.TestCase):

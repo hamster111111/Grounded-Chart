@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Iterable
 
-from grounded_chart.schema import ChartIntentPlan, DataPoint, FilterSpec, PlotTrace
+from grounded_chart.core.schema import ChartIntentPlan, DataPoint, FilterSpec, PlotTrace
 
 Row = dict[str, Any]
 

@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import PatchAnchor, PatchOperation, apply_patch_operations, parse_patch_operations
+from grounded_chart.api import PatchAnchor, PatchOperation, apply_patch_operations, parse_patch_operations
 
 
 class PatchOpsTest(unittest.TestCase):

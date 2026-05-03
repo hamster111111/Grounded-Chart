@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMUsage
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace, LLMUsage
 from grounded_chart.agents.feedback import PLAN_AGENT, normalize_layout_plan_feedback
 
 

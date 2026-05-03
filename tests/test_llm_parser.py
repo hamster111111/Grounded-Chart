@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import LLMIntentParser, TableSchema, derive_expected_figure
+from grounded_chart.api import LLMIntentParser, TableSchema, derive_expected_figure
 
 
 class StubLLMClient:

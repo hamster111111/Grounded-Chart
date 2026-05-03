@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.api import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 
 
 class RequirementDslTest(unittest.TestCase):

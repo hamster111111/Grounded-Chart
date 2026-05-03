@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from grounded_chart.schema import TableSchema
+from grounded_chart.core.schema import TableSchema
 
 
 @dataclass(frozen=True)

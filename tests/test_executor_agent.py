@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from grounded_chart.executor_agent import validate_executor_fidelity
+from grounded_chart.agents.executor import validate_executor_fidelity
 
 
 CONTEXT = {

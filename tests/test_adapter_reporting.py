@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     FigureRequirementSpec,
     GroundedChartPipeline,

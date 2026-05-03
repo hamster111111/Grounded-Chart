@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart.construction_plan import HeuristicChartConstructionPlanner, validate_construction_plan
-from grounded_chart.source_data import SourceDataPlanner
+from grounded_chart.core.construction_plan import HeuristicChartConstructionPlanner, validate_construction_plan
+from grounded_chart.data.source_data import SourceDataPlanner
 
 
 CASE_98_QUERY = """Create a multi-layered graph using Python with my data, follow these streamlined steps:

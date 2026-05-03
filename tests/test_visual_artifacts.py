@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     ArtistTrace,
     AxisTrace,
     ExpectedArtifactNode,

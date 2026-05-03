@@ -2,8 +2,8 @@
 
 from collections.abc import Iterable
 
-from grounded_chart import GroundedChartPipeline
-from grounded_chart.trace_runner import MatplotlibTraceRunner
+from grounded_chart.api import GroundedChartPipeline
+from grounded_chart.runtime.trace_runner import MatplotlibTraceRunner
 from grounded_chart_adapters.batch import BatchRunResult, BatchRunner
 from grounded_chart_adapters.base import AdapterRunResult, ChartCase
 

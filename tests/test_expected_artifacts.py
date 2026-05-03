@@ -1,8 +1,8 @@
 import unittest
 
-from grounded_chart import AxisTrace, DataPoint, FigureTrace, LLMExpectedArtifactExtractor, OperatorLevelVerifier, PlotTrace, extract_expected_trace_from_text
-from grounded_chart.expected_artifacts import extract_expected_trace_from_texts
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.api import AxisTrace, DataPoint, FigureTrace, LLMExpectedArtifactExtractor, OperatorLevelVerifier, PlotTrace, extract_expected_trace_from_text
+from grounded_chart.data.expected_artifacts import extract_expected_trace_from_texts
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
 
 
 

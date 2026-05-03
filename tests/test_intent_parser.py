@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import HeuristicIntentParser, TableSchema
+from grounded_chart.api import HeuristicIntentParser, TableSchema
 
 
 class HeuristicIntentParserTest(unittest.TestCase):

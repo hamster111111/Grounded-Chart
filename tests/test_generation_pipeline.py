@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     ChartCodeGeneration,
     ChartConstructionPlan,
@@ -25,8 +25,8 @@ from grounded_chart import (
     VisualLayerPlan,
     VisualPanelPlan,
 )
-from grounded_chart.codegen import ChartCodeGenerationRequest
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.agents.codegen import ChartCodeGenerationRequest
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
 
 
 STATIC_BAR_CODE = """

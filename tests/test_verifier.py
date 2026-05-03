@@ -1,7 +1,7 @@
 import unittest
 
-from grounded_chart import DataPoint, PlotTrace
-from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.api import DataPoint, PlotTrace
+from grounded_chart.verification.verifier import OperatorLevelVerifier
 
 
 class OperatorLevelVerifierTest(unittest.TestCase):

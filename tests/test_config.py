@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart import load_ablation_run_config
+from grounded_chart.api import load_ablation_run_config
 
 
 class AblationConfigTest(unittest.TestCase):

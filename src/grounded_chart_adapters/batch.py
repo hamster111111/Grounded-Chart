@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from grounded_chart import GroundedChartPipeline
-from grounded_chart.trace_runner import MatplotlibTraceRunner
+from grounded_chart.api import GroundedChartPipeline
+from grounded_chart.runtime.trace_runner import MatplotlibTraceRunner
 from grounded_chart_adapters.base import AdapterRunResult, BenchmarkAdapter
 from grounded_chart_adapters.reporting import BatchReport, case_report_from_exception, case_report_from_result
 

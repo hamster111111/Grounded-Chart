@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     ChartIntentPlan,
     DataPoint,
@@ -17,8 +17,8 @@ from grounded_chart import (
     TableSchema,
     build_requirement_plan,
 )
-from grounded_chart.expected_artifacts import extract_expected_trace_from_texts
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.data.expected_artifacts import extract_expected_trace_from_texts
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 from grounded_chart_adapters.base import ChartCase
 
 

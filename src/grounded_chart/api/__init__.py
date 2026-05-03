@@ -1,7 +1,7 @@
 ﻿"""GroundedChart: execution-grounded verification for language-to-chart generation."""
 
-from grounded_chart.canonical_executor import CanonicalExecutor
-from grounded_chart.backend import (
+from grounded_chart.core.canonical_executor import CanonicalExecutor
+from grounded_chart.core.backend import (
     BackendProfile,
     MATPLOTLIB_2D_PROFILE,
     MATPLOTLIB_3D_PROFILE,
@@ -10,9 +10,9 @@ from grounded_chart.backend import (
     infer_backend_name,
     infer_backend_profile,
 )
-from grounded_chart.config import AblationRunConfig, load_ablation_run_config, load_ablation_run_config_from_env
-from grounded_chart.diagnostics import FailureAtom, failure_atoms_from_evidence_graph, failure_atoms_to_dicts
-from grounded_chart.expected_artifacts import (
+from grounded_chart.runtime.config import AblationRunConfig, load_ablation_run_config, load_ablation_run_config_from_env
+from grounded_chart.verification.diagnostics import FailureAtom, failure_atoms_from_evidence_graph, failure_atoms_to_dicts
+from grounded_chart.data.expected_artifacts import (
     ExpectedArtifactNode,
     ExpectedTraceExtraction,
     ExplicitPointExpectedTraceExtractor,
@@ -22,7 +22,7 @@ from grounded_chart.expected_artifacts import (
     extract_expected_trace_from_text,
     extract_expected_trace_from_texts,
 )
-from grounded_chart.evidence import (
+from grounded_chart.verification.evidence import (
     attach_figure_requirements,
     bind_requirement_policy_to_verification,
     build_evidence_graph,
@@ -31,8 +31,8 @@ from grounded_chart.evidence import (
     infer_requirement_id,
     merge_expected_figure_specs,
 )
-from grounded_chart.intent_parser import HeuristicIntentParser, IntentParser, LLMIntentParser
-from grounded_chart.llm import (
+from grounded_chart.verification.intent_parser import HeuristicIntentParser, IntentParser, LLMIntentParser
+from grounded_chart.runtime.llm import (
     LLMClient,
     LLMCompletionTrace,
     LLMJsonResult,
@@ -41,16 +41,16 @@ from grounded_chart.llm import (
     OpenAICompatibleLLMClient,
     extract_json_object,
 )
-from grounded_chart.patch_ops import PatchAnchor, PatchApplyResult, PatchOperation, apply_patch_operations, parse_patch_operations
-from grounded_chart.pipeline import GroundedChartPipeline
+from grounded_chart.repair.patch_ops import PatchAnchor, PatchApplyResult, PatchOperation, apply_patch_operations, parse_patch_operations
+from grounded_chart.orchestration.pipeline import GroundedChartPipeline
 from grounded_chart.agents.feedback import (
     normalize_figure_plan_feedback,
     normalize_layout_plan_feedback,
     normalize_plan_feedback_items,
     plan_updates_from_feedback,
 )
-from grounded_chart.repairer import LLMRepairer, Repairer, RuleBasedRepairer, TieredRepairer
-from grounded_chart.repair_policy import (
+from grounded_chart.repair.repairer import LLMRepairer, Repairer, RuleBasedRepairer, TieredRepairer
+from grounded_chart.repair.policy import (
     RepairActionClass,
     RepairGateDecision,
     RepairPlan,
@@ -60,7 +60,7 @@ from grounded_chart.repair_policy import (
     repair_action_class_for_plan,
     repair_action_class_for_scope,
 )
-from grounded_chart.requirements import (
+from grounded_chart.core.requirements import (
     Artifact,
     ChartRequirementPlan,
     EvidenceGraph,
@@ -68,7 +68,7 @@ from grounded_chart.requirements import (
     PanelRequirementPlan,
     RequirementNode,
 )
-from grounded_chart.schema import (
+from grounded_chart.core.schema import (
     ArtistTrace,
     AxisRequirementSpec,
     AxisTrace,
@@ -88,10 +88,10 @@ from grounded_chart.schema import (
     VerificationError,
     VerificationReport,
 )
-from grounded_chart.code_structure import CodeStructureArtifact, extract_code_structure_artifacts
-from grounded_chart.trace_runner import ManualTraceRunner, MatplotlibTraceRunner
-from grounded_chart.verifier import OperatorLevelVerifier
-from grounded_chart.visual_artifacts import (
+from grounded_chart.runtime.code_structure import CodeStructureArtifact, extract_code_structure_artifacts
+from grounded_chart.runtime.trace_runner import ManualTraceRunner, MatplotlibTraceRunner
+from grounded_chart.verification.verifier import OperatorLevelVerifier
+from grounded_chart.data.visual_artifacts import (
     ActualVisualArtifact,
     ExpectedVisualArtifact,
     compile_expected_visual_artifacts,
@@ -106,8 +106,8 @@ from grounded_chart.agents.codegen import (
     StaticChartCodeGenerator,
 )
 from grounded_chart.agents.protocol import ChartProtocolAgent, ChartRenderingProtocol, ProtocolValidationReport, validate_protocol
-from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
-from grounded_chart.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
+from grounded_chart.runtime.rendering import ChartImageRenderer, ChartRenderResult
+from grounded_chart.orchestration.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
 from grounded_chart.agents.figure_reader import (
     FigureAudit,
     FigureReaderAgent,
@@ -125,7 +125,7 @@ from grounded_chart.agents.executor import (
     ExecutorFidelityValidator,
     validate_executor_fidelity,
 )
-from grounded_chart.construction_plan import (
+from grounded_chart.core.construction_plan import (
     ChartConstructionPlan,
     HeuristicChartConstructionPlanner,
     PlanDecision,
@@ -136,7 +136,7 @@ from grounded_chart.construction_plan import (
     VisualPanelPlan,
     validate_construction_plan,
 )
-from grounded_chart.source_data import SourceDataExecution, SourceDataExecutor, SourceDataPlan, SourceDataPlanner, SourceFileSummary
+from grounded_chart.data.source_data import SourceDataExecution, SourceDataExecutor, SourceDataPlan, SourceDataPlanner, SourceFileSummary
 
 __all__ = [
     "Artifact",

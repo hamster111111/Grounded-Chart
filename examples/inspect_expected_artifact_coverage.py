@@ -13,9 +13,9 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import OpenAICompatibleLLMClient, load_ablation_run_config
-from grounded_chart.expected_artifacts import ExplicitPointExpectedTraceExtractor, LLMExpectedArtifactExtractor
-from grounded_chart.schema import PlotTrace
+from grounded_chart.api import OpenAICompatibleLLMClient, load_ablation_run_config
+from grounded_chart.data.expected_artifacts import ExplicitPointExpectedTraceExtractor, LLMExpectedArtifactExtractor
+from grounded_chart.core.schema import PlotTrace
 
 
 DEFAULT_MATPLOTBENCH_INSTRUCTIONS = Path(r"D:\Code\autoReaserch\MatPlotAgent\benchmark_data\benchmark_instructions.json")

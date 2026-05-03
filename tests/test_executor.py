@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import CanonicalExecutor, ChartIntentPlan, MeasureSpec, SortSpec
+from grounded_chart.api import CanonicalExecutor, ChartIntentPlan, MeasureSpec, SortSpec
 
 
 class CanonicalExecutorTest(unittest.TestCase):

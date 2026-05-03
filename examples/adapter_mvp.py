@@ -1,4 +1,4 @@
-from grounded_chart import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer, TableSchema
+from grounded_chart.api import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer, TableSchema
 from grounded_chart_adapters import ChartCase, InMemoryCaseAdapter
 
 case = ChartCase(

@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart import ChartIntentPlan, MeasureSpec, ParsedRequirementBundle, TableSchema
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.api import ChartIntentPlan, MeasureSpec, ParsedRequirementBundle, TableSchema
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 from grounded_chart_adapters import RequirementExtractionRunner
 from grounded_chart_adapters.matplotbench import MatplotBenchRecord
 

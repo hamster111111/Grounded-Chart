@@ -15,7 +15,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import (  # noqa: E402
+from grounded_chart.api import (  # noqa: E402
     ChartImageRenderer,
     MatplotlibTraceRunner,
     OpenAICompatibleLLMClient,

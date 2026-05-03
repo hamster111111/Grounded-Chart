@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     MATPLOTLIB_2D_PROFILE,
     MATPLOTLIB_3D_PROFILE,
     PLOTLY_PROFILE,

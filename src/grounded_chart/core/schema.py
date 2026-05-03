@@ -3,12 +3,12 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 
-from grounded_chart.llm import LLMCompletionTrace
-from grounded_chart.patch_ops import PatchOperation
-from grounded_chart.requirements import ChartRequirementPlan, EvidenceGraph
+from grounded_chart.runtime.llm import LLMCompletionTrace
+from grounded_chart.repair.patch_ops import PatchOperation
+from grounded_chart.core.requirements import ChartRequirementPlan, EvidenceGraph
 
 if TYPE_CHECKING:
-    from grounded_chart.repair_policy import RepairPlan
+    from grounded_chart.repair.policy import RepairPlan
 
 Aggregation = Literal["none", "count", "sum", "mean", "min", "max"]
 ChartType = Literal["bar", "line", "pie", "scatter", "area", "heatmap", "box", "unknown"]

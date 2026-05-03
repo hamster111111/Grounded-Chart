@@ -7,10 +7,10 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from grounded_chart.artifact_workspace import FIGURE_READER_AGENT_DIR
-from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMUsage
+from grounded_chart.workspace.artifact_workspace import FIGURE_READER_AGENT_DIR
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace, LLMUsage
 from grounded_chart.agents.feedback import normalize_figure_plan_feedback
-from grounded_chart.source_data import parse_scalar, short_cell
+from grounded_chart.data.source_data import parse_scalar, short_cell
 
 
 @dataclass(frozen=True)

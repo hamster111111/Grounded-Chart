@@ -1,5 +1,5 @@
-from grounded_chart import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer, TableSchema
-from grounded_chart.trace_runner import MatplotlibTraceRunner
+from grounded_chart.api import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer, TableSchema
+from grounded_chart.runtime.trace_runner import MatplotlibTraceRunner
 
 rows = [
     {"category": "A", "sales": 10},

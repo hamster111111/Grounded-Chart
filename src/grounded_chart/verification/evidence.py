@@ -4,9 +4,9 @@ import re
 from dataclasses import replace
 from typing import Any
 
-from grounded_chart.requirements import Artifact, ChartRequirementPlan, EvidenceGraph, EvidenceLink, PanelRequirementPlan, RequirementNode
-from grounded_chart.schema import AxisRequirementSpec, ChartIntentPlan, FigureRequirementSpec, FigureTrace, PlotTrace, VerificationReport
-from grounded_chart.visual_artifacts import extract_actual_visual_artifacts
+from grounded_chart.core.requirements import Artifact, ChartRequirementPlan, EvidenceGraph, EvidenceLink, PanelRequirementPlan, RequirementNode
+from grounded_chart.core.schema import AxisRequirementSpec, ChartIntentPlan, FigureRequirementSpec, FigureTrace, PlotTrace, VerificationReport
+from grounded_chart.data.visual_artifacts import extract_actual_visual_artifacts
 
 
 def build_requirement_plan(

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from grounded_chart import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer
+from grounded_chart.api import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer
 from grounded_chart_adapters import BatchRunner, JsonCaseAdapter, write_batch_report_html
 
 

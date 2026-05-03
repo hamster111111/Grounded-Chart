@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from grounded_chart import HeuristicIntentParser, TableSchema
-from grounded_chart.intent_parser import _build_llm_requirement_bundle
+from grounded_chart.api import HeuristicIntentParser, TableSchema
+from grounded_chart.verification.intent_parser import _build_llm_requirement_bundle
 from grounded_chart_adapters import RequirementExtractionReport, RequirementExtractionRunner
 
 

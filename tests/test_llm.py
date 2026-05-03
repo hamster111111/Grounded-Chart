@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart.llm import OpenAICompatibleConfig, OpenAICompatibleLLMClient, _apply_no_proxy_for_base_url, _merge_no_proxy_value, _merge_no_proxy_values
+from grounded_chart.runtime.llm import OpenAICompatibleConfig, OpenAICompatibleLLMClient, _apply_no_proxy_for_base_url, _merge_no_proxy_value, _merge_no_proxy_values
 
 
 class NoProxyHelpersTest(unittest.TestCase):

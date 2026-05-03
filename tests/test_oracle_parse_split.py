@@ -1,7 +1,7 @@
 import unittest
 
-from grounded_chart import ChartIntentPlan, GroundedChartPipeline, MeasureSpec, ParsedRequirementBundle, TableSchema
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
+from grounded_chart.api import ChartIntentPlan, GroundedChartPipeline, MeasureSpec, ParsedRequirementBundle, TableSchema
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode
 from grounded_chart_adapters import BatchRunner, InMemoryCaseAdapter
 from grounded_chart_adapters.base import ChartCase
 

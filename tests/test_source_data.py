@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart.source_data import SourceDataExecutor, SourceDataPlanner
+from grounded_chart.data.source_data import SourceDataExecutor, SourceDataPlanner
 
 
 class SourceDataTest(unittest.TestCase):

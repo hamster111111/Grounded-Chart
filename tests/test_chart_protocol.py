@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from grounded_chart.chart_protocol import ChartProtocolAgent, validate_protocol
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.agents.protocol import ChartProtocolAgent, validate_protocol
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
 
 
 class ChartProtocolTest(unittest.TestCase):

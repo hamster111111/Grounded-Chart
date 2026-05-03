@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from grounded_chart import infer_backend_profile, repair_action_class_for_scope
-from grounded_chart.diagnostics import failure_atoms_from_evidence_graph, failure_atoms_to_dicts
-from grounded_chart.schema import DataPoint, PipelineResult, SortSpec, VerificationError
+from grounded_chart.api import infer_backend_profile, repair_action_class_for_scope
+from grounded_chart.verification.diagnostics import failure_atoms_from_evidence_graph, failure_atoms_to_dicts
+from grounded_chart.core.schema import DataPoint, PipelineResult, SortSpec, VerificationError
 from grounded_chart_adapters.base import AdapterRunResult, ChartCase
 
 CaseStatus = Literal["passed", "failed", "error"]

@@ -3,8 +3,8 @@
 from math import isclose
 from typing import Any
 
-from grounded_chart.schema import AxisTrace, FigureRequirementSpec, FigureTrace, PlotTrace, VerificationError, VerificationReport
-from grounded_chart.visual_artifacts import verify_expected_visual_artifacts
+from grounded_chart.core.schema import AxisTrace, FigureRequirementSpec, FigureTrace, PlotTrace, VerificationError, VerificationReport
+from grounded_chart.data.visual_artifacts import verify_expected_visual_artifacts
 
 
 class OperatorLevelVerifier:

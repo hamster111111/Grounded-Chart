@@ -4,9 +4,9 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from grounded_chart.llm import LLMClient, LLMCompletionTrace
-from grounded_chart.requirements import ChartRequirementPlan
-from grounded_chart.schema import ChartIntentPlan, TableSchema
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace
+from grounded_chart.core.requirements import ChartRequirementPlan
+from grounded_chart.core.schema import ChartIntentPlan, TableSchema
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,9 @@
 from dataclasses import replace
 from typing import Iterable
 
-from grounded_chart.canonical_executor import CanonicalExecutor, Row
-from grounded_chart.diagnostics import failure_atoms_from_evidence_graph
-from grounded_chart.evidence import (
+from grounded_chart.core.canonical_executor import CanonicalExecutor, Row
+from grounded_chart.verification.diagnostics import failure_atoms_from_evidence_graph
+from grounded_chart.verification.evidence import (
     attach_figure_requirements,
     bind_requirement_policy_to_verification,
     build_evidence_graph,
@@ -13,11 +13,11 @@ from grounded_chart.evidence import (
     derive_expected_figure,
     merge_expected_figure_specs,
 )
-from grounded_chart.intent_parser import IntentParser
-from grounded_chart.repair_loop import BoundedRepairLoop
-from grounded_chart.repair_policy import RuleBasedRepairPlanner, apply_auto_repair_gate, normalize_repair_policy_mode
-from grounded_chart.repairer import Repairer
-from grounded_chart.schema import (
+from grounded_chart.verification.intent_parser import IntentParser
+from grounded_chart.repair.loop import BoundedRepairLoop
+from grounded_chart.repair.policy import RuleBasedRepairPlanner, apply_auto_repair_gate, normalize_repair_policy_mode
+from grounded_chart.repair.repairer import Repairer
+from grounded_chart.core.schema import (
     FigureRequirementSpec,
     FigureTrace,
     ParsedRequirementBundle,
@@ -28,8 +28,8 @@ from grounded_chart.schema import (
     VerificationError,
     VerificationReport,
 )
-from grounded_chart.trace_runner import MatplotlibTraceRunner
-from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.runtime.trace_runner import MatplotlibTraceRunner
+from grounded_chart.verification.verifier import OperatorLevelVerifier
 
 
 class GroundedChartPipeline:

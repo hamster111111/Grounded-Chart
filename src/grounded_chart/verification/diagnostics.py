@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from grounded_chart.requirements import Artifact, EvidenceGraph, EvidenceLink, RequirementNode
+from grounded_chart.core.requirements import Artifact, EvidenceGraph, EvidenceLink, RequirementNode
 
 
 @dataclass(frozen=True)

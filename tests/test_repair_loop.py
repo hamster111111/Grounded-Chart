@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     FigureRequirementSpec,
     GroundedChartPipeline,
@@ -11,8 +11,8 @@ from grounded_chart import (
     RuleBasedRepairer,
     TableSchema,
 )
-from grounded_chart.repair_loop import _patch_op_budget, _repaired_code_preservation_rejection, _validate_strict_local_patch_ops
-from grounded_chart.repair_policy import RepairPlan
+from grounded_chart.repair.loop import _patch_op_budget, _repaired_code_preservation_rejection, _validate_strict_local_patch_ops
+from grounded_chart.repair.policy import RepairPlan
 from grounded_chart_adapters import ChartCase, InMemoryCaseAdapter
 
 

@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from grounded_chart.llm import LLMClient, LLMCompletionTrace
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace
 
 
 @dataclass(frozen=True)

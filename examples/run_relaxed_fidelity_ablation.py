@@ -17,7 +17,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import (  # noqa: E402
+from grounded_chart.api import (  # noqa: E402
     ChartImageRenderer,
     MatplotlibTraceRunner,
     OpenAICompatibleLLMClient,
@@ -26,7 +26,7 @@ from grounded_chart import (  # noqa: E402
     load_ablation_run_config,
     parse_patch_operations,
 )
-from grounded_chart.llm import extract_json_object  # noqa: E402
+from grounded_chart.runtime.llm import extract_json_object  # noqa: E402
 from grounded_chart_adapters.matplotbench import MatplotBenchEvalWorkspaceExporter  # noqa: E402
 
 
@@ -1529,7 +1529,7 @@ def build_source_file_evidence(
 
 
 def build_source_schema_constraints(source_file_evidence: dict[str, Any]) -> dict[str, Any]:
-    from grounded_chart.source_data import schema_constraint_for_file
+    from grounded_chart.data.source_data import schema_constraint_for_file
 
     class _Summary:
         def __init__(self, name: str, columns: list[str]) -> None:

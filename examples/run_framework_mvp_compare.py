@@ -14,7 +14,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import (
+from grounded_chart.api import (
     AblationRunConfig,
     GroundedChartPipeline,
     HeuristicIntentParser,

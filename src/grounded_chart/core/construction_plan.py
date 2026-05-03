@@ -4,7 +4,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
-from grounded_chart.requirements import ChartRequirementPlan
+from grounded_chart.core.requirements import ChartRequirementPlan
 
 
 @dataclass(frozen=True)

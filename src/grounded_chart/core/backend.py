@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from grounded_chart.schema import FigureTrace, PlotTrace
+    from grounded_chart.core.schema import FigureTrace, PlotTrace
 
 SupportTier = Literal["native", "spec_accessible", "render_only", "unsupported"]
 VerificationMode = Literal["hard", "partial", "soft", "none"]

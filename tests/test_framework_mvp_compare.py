@@ -1,7 +1,7 @@
 import unittest
 
 import examples.run_framework_mvp_compare as mvp_compare
-from grounded_chart import AblationRunConfig, OpenAICompatibleConfig
+from grounded_chart.api import AblationRunConfig, OpenAICompatibleConfig
 
 
 class FrameworkMvpCompareTest(unittest.TestCase):

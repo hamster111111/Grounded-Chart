@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from grounded_chart.llm import LLMClient
-from grounded_chart.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode, RequirementStatus
-from grounded_chart.schema import (
+from grounded_chart.runtime.llm import LLMClient
+from grounded_chart.core.requirements import ChartRequirementPlan, PanelRequirementPlan, RequirementNode, RequirementStatus
+from grounded_chart.core.schema import (
     ChartIntentPlan,
     ChartType,
     FilterOp,

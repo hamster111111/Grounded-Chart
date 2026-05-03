@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, Protocol
 
-from grounded_chart.schema import FigureRequirementSpec, ParsedRequirementBundle, PipelineResult, PlotTrace, TableSchema
+from grounded_chart.core.schema import FigureRequirementSpec, ParsedRequirementBundle, PipelineResult, PlotTrace, TableSchema
 
 
 @dataclass(frozen=True)

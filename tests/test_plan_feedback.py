@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from grounded_chart.figure_reader import FigureAudit
-from grounded_chart.layout_critic import LayoutCritique
-from grounded_chart.plan_feedback import plan_updates_from_feedback
-from grounded_chart.plan_revision import LayoutOnlyPlanRevisionAgent
-from grounded_chart.construction_plan import ChartConstructionPlan, VisualPanelPlan
+from grounded_chart.agents.figure_reader import FigureAudit
+from grounded_chart.agents.layout import LayoutCritique
+from grounded_chart.agents.feedback import plan_updates_from_feedback
+from grounded_chart.agents.plan_revision import LayoutOnlyPlanRevisionAgent
+from grounded_chart.core.construction_plan import ChartConstructionPlan, VisualPanelPlan
 
 
 class PlanFeedbackTest(unittest.TestCase):

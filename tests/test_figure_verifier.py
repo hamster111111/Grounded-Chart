@@ -1,8 +1,8 @@
 import unittest
 
-from grounded_chart import ArtistTrace, AxisRequirementSpec, DataPoint, FigureRequirementSpec, FigureTrace, MatplotlibTraceRunner, PlotTrace
-from grounded_chart.schema import AxisTrace
-from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.api import ArtistTrace, AxisRequirementSpec, DataPoint, FigureRequirementSpec, FigureTrace, MatplotlibTraceRunner, PlotTrace
+from grounded_chart.core.schema import AxisTrace
+from grounded_chart.verification.verifier import OperatorLevelVerifier
 
 
 class FigureVerifierTest(unittest.TestCase):

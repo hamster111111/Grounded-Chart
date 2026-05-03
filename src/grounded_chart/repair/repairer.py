@@ -7,12 +7,12 @@ from dataclasses import replace
 from textwrap import dedent
 from typing import Any, Protocol
 
-from grounded_chart.llm import LLMClient, LLMJsonResult
-from grounded_chart.diagnostics import failure_atoms_from_evidence_graph, failure_atoms_to_dicts
-from grounded_chart.patch_ops import PatchAnchor, PatchOperation, parse_patch_operations
-from grounded_chart.repair_policy import RepairPlan, RuleBasedRepairPlanner, override_repair_plan_scope
-from grounded_chart.requirements import EvidenceGraph
-from grounded_chart.schema import ChartIntentPlan, RepairPatch, VerificationReport
+from grounded_chart.runtime.llm import LLMClient, LLMJsonResult
+from grounded_chart.verification.diagnostics import failure_atoms_from_evidence_graph, failure_atoms_to_dicts
+from grounded_chart.repair.patch_ops import PatchAnchor, PatchOperation, parse_patch_operations
+from grounded_chart.repair.policy import RepairPlan, RuleBasedRepairPlanner, override_repair_plan_scope
+from grounded_chart.core.requirements import EvidenceGraph
+from grounded_chart.core.schema import ChartIntentPlan, RepairPatch, VerificationReport
 
 
 class Repairer(Protocol):

@@ -3,8 +3,8 @@
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from grounded_chart.backend import infer_backend_profile
-from grounded_chart.schema import VerificationReport
+from grounded_chart.core.backend import infer_backend_profile
+from grounded_chart.core.schema import VerificationReport
 
 RepairLevel = Literal[0, 1, 2, 3, 4]
 RepairPolicyMode = Literal["strict", "exploratory"]

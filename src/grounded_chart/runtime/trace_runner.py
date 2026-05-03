@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Iterable
 from unittest.mock import patch
 
-from grounded_chart.code_structure import extract_code_structure_artifacts
-from grounded_chart.schema import ArtistTrace, AxisTrace, ChartType, DataPoint, FigureTrace, PlotTrace
+from grounded_chart.runtime.code_structure import extract_code_structure_artifacts
+from grounded_chart.core.schema import ArtistTrace, AxisTrace, ChartType, DataPoint, FigureTrace, PlotTrace
 
 
 @dataclass(frozen=True)

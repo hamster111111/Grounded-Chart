@@ -2,7 +2,7 @@ import argparse
 import os
 from pathlib import Path
 
-from grounded_chart import (
+from grounded_chart.api import (
     AblationRunConfig,
     GroundedChartPipeline,
     HeuristicIntentParser,

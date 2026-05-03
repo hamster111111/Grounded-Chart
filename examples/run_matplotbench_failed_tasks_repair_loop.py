@@ -6,7 +6,7 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from grounded_chart import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer
+from grounded_chart.api import GroundedChartPipeline, HeuristicIntentParser, RuleBasedRepairer
 from grounded_chart_adapters import BatchRunner, JsonCaseAdapter, write_batch_report_html
 
 

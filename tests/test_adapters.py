@@ -3,7 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from grounded_chart import DataPoint, GroundedChartPipeline, HeuristicIntentParser, PlotTrace, RuleBasedRepairer, TableSchema
+from grounded_chart.api import DataPoint, GroundedChartPipeline, HeuristicIntentParser, PlotTrace, RuleBasedRepairer, TableSchema
 from grounded_chart_adapters import ChartCase, InMemoryCaseAdapter, JsonCaseAdapter
 
 

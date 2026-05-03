@@ -5,14 +5,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
-from grounded_chart.evidence import bind_requirement_policy_to_verification, build_evidence_graph, build_requirement_plan
-from grounded_chart.patch_ops import PatchApplyResult, apply_patch_operations
-from grounded_chart.repairer import Repairer
-from grounded_chart.schema import FigureRequirementSpec, FigureTrace, PipelineResult, PlotTrace, RepairAttempt, RepairLoopAction, TableSchema
-from grounded_chart.trace_runner import MatplotlibTraceRunner
-from grounded_chart.verifier import OperatorLevelVerifier
-from grounded_chart.canonical_executor import CanonicalExecutor, Row
-from grounded_chart.intent_parser import IntentParser
+from grounded_chart.verification.evidence import bind_requirement_policy_to_verification, build_evidence_graph, build_requirement_plan
+from grounded_chart.repair.patch_ops import PatchApplyResult, apply_patch_operations
+from grounded_chart.repair.repairer import Repairer
+from grounded_chart.core.schema import FigureRequirementSpec, FigureTrace, PipelineResult, PlotTrace, RepairAttempt, RepairLoopAction, TableSchema
+from grounded_chart.runtime.trace_runner import MatplotlibTraceRunner
+from grounded_chart.verification.verifier import OperatorLevelVerifier
+from grounded_chart.core.canonical_executor import CanonicalExecutor, Row
+from grounded_chart.verification.intent_parser import IntentParser
 
 
 @dataclass(frozen=True)

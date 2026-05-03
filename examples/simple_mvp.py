@@ -1,10 +1,10 @@
-from grounded_chart import (
+from grounded_chart.api import (
     GroundedChartPipeline,
     HeuristicIntentParser,
     RuleBasedRepairer,
     TableSchema,
 )
-from grounded_chart.trace_runner import ManualTraceRunner
+from grounded_chart.runtime.trace_runner import ManualTraceRunner
 
 rows = [
     {"category": "A", "sales": 10},

@@ -5,8 +5,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
-from grounded_chart.construction_plan import ChartConstructionPlan, PlanDecision, VisualPanelPlan
-from grounded_chart.artifact_workspace import PLAN_REVISION_AGENT_DIR
+from grounded_chart.core.construction_plan import ChartConstructionPlan, PlanDecision, VisualPanelPlan
+from grounded_chart.workspace.artifact_workspace import PLAN_REVISION_AGENT_DIR
 from grounded_chart.agents.feedback import plan_updates_from_feedback
 from grounded_chart.agents.layout import LayoutCritique
 

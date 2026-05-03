@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
 
-from grounded_chart.artifact_workspace import ArtifactWorkspaceBuilder, LAYOUT_AGENT_DIR
+from grounded_chart.workspace.artifact_workspace import ArtifactWorkspaceBuilder, LAYOUT_AGENT_DIR
 from grounded_chart.agents.codegen import ChartCodeGeneration, ChartCodeGenerationRequest, ChartCodeGenerator
 from grounded_chart.agents.executor import validate_executor_fidelity
 from grounded_chart.agents.feedback import plan_updates_from_feedback
@@ -22,14 +22,14 @@ from grounded_chart.agents.figure_reader import (
 from grounded_chart.agents.layout import LayoutCriticAgent, LayoutCritique
 from grounded_chart.agents.planning import ChartPlanAgent, HeuristicPlanAgent, PlanAgentRequest, PlanAgentResult
 from grounded_chart.agents.protocol import ChartProtocolAgent
-from grounded_chart.construction_plan import HeuristicChartConstructionPlanner, PlanDecision, validate_construction_plan
-from grounded_chart.evidence import build_requirement_plan
-from grounded_chart.llm import LLMCompletionTrace, LLMUsage
-from grounded_chart.patch_ops import apply_patch_operations
-from grounded_chart.pipeline import GroundedChartPipeline
-from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
-from grounded_chart.schema import FigureRequirementSpec, ParsedRequirementBundle, PipelineResult, TableSchema
-from grounded_chart.source_data import SourceDataExecutor, SourceDataPlanner
+from grounded_chart.core.construction_plan import HeuristicChartConstructionPlanner, PlanDecision, validate_construction_plan
+from grounded_chart.verification.evidence import build_requirement_plan
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMUsage
+from grounded_chart.repair.patch_ops import apply_patch_operations
+from grounded_chart.orchestration.pipeline import GroundedChartPipeline
+from grounded_chart.runtime.rendering import ChartImageRenderer, ChartRenderResult
+from grounded_chart.core.schema import FigureRequirementSpec, ParsedRequirementBundle, PipelineResult, TableSchema
+from grounded_chart.data.source_data import SourceDataExecutor, SourceDataPlanner
 
 
 @dataclass(frozen=True)

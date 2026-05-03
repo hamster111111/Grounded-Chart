@@ -3,9 +3,9 @@ import json
 import tempfile
 from pathlib import Path
 
-from grounded_chart.plan_agent import LLMPlanAgent, PlanAgentRequest
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
-from grounded_chart.construction_plan import ChartConstructionPlan, VisualLayerPlan, VisualPanelPlan
+from grounded_chart.agents.planning import LLMPlanAgent, PlanAgentRequest
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.core.construction_plan import ChartConstructionPlan, VisualLayerPlan, VisualPanelPlan
 
 
 class LLMPlanAgentTest(unittest.TestCase):

@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
-from grounded_chart.schema import AxisRequirementSpec, DataPoint, FigureRequirementSpec, PlotTrace
-from grounded_chart.visual_artifacts import compile_expected_visual_artifacts
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
+from grounded_chart.core.schema import AxisRequirementSpec, DataPoint, FigureRequirementSpec, PlotTrace
+from grounded_chart.data.visual_artifacts import compile_expected_visual_artifacts
 
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"

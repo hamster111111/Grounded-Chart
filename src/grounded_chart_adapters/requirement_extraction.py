@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-from grounded_chart import IntentParser, build_requirement_plan
-from grounded_chart.schema import ParsedRequirementBundle, TableSchema
+from grounded_chart.api import IntentParser, build_requirement_plan
+from grounded_chart.core.schema import ParsedRequirementBundle, TableSchema
 
 ExtractionStatus = Literal["ok", "error"]
 

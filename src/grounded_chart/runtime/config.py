@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from grounded_chart.llm import OpenAICompatibleConfig
+from grounded_chart.runtime.llm import OpenAICompatibleConfig
 
 
 @dataclass(frozen=True)

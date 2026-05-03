@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from grounded_chart import LLMIntentParser, OpenAICompatibleLLMClient, load_ablation_run_config
-from grounded_chart.schema import TableSchema
+from grounded_chart.api import LLMIntentParser, OpenAICompatibleLLMClient, load_ablation_run_config
+from grounded_chart.core.schema import TableSchema
 
 
 def main() -> None:

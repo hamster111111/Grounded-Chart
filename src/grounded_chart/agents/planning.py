@@ -5,14 +5,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
-from grounded_chart.artifact_workspace import PLAN_AGENT_DIR
-from grounded_chart.construction_plan import (
+from grounded_chart.workspace.artifact_workspace import PLAN_AGENT_DIR
+from grounded_chart.core.construction_plan import (
     ChartConstructionPlan,
     PlanDecision,
     chart_construction_plan_from_dict,
 )
-from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
-from grounded_chart.requirements import ChartRequirementPlan
+from grounded_chart.runtime.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
+from grounded_chart.core.requirements import ChartRequirementPlan
 
 
 @dataclass(frozen=True)

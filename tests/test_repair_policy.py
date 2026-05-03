@@ -1,6 +1,6 @@
 import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     AxisTrace,
     Artifact,
@@ -18,8 +18,8 @@ from grounded_chart import (
     apply_auto_repair_gate,
     repair_action_class_for_scope,
 )
-from grounded_chart.pipeline import _diagnostic_repairability_from_evidence
-from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.orchestration.pipeline import _diagnostic_repairability_from_evidence
+from grounded_chart.verification.verifier import OperatorLevelVerifier
 
 
 class RepairPolicyTest(unittest.TestCase):

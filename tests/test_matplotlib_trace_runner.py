@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from grounded_chart import MatplotlibTraceRunner
+from grounded_chart.api import MatplotlibTraceRunner
 
 
 class MatplotlibTraceRunnerTest(unittest.TestCase):

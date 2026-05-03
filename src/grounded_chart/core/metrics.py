@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from grounded_chart.schema import VerificationReport
+from grounded_chart.core.schema import VerificationReport
 
 
 def report_metrics(reports: list[VerificationReport]) -> dict[str, object]:

@@ -1,6 +1,6 @@
 ﻿import unittest
 
-from grounded_chart import (
+from grounded_chart.api import (
     AxisRequirementSpec,
     AxisTrace,
     CanonicalExecutor,
@@ -20,7 +20,7 @@ from grounded_chart import (
     build_evidence_graph,
     build_requirement_plan,
 )
-from grounded_chart.verifier import OperatorLevelVerifier
+from grounded_chart.verification.verifier import OperatorLevelVerifier
 
 
 class StubLLMClient:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
-from grounded_chart.schema import FigureTrace, VerificationError
+from grounded_chart.core.schema import FigureTrace, VerificationError
 
 
 @dataclass(frozen=True)

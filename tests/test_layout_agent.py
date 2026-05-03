@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from grounded_chart.layout_critic import VLMLayoutAgent
-from grounded_chart.llm import LLMCompletionTrace, LLMJsonResult
-from grounded_chart.rendering import ChartRenderResult
+from grounded_chart.agents.layout import VLMLayoutAgent
+from grounded_chart.runtime.llm import LLMCompletionTrace, LLMJsonResult
+from grounded_chart.runtime.rendering import ChartRenderResult
 
 
 class FakeVisionClient:
