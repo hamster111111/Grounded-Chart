@@ -1403,8 +1403,8 @@ def _replan_generation_context(
             "feedback_bundle": feedback_bundle,
             "previous_construction_plan": previous_construction_plan,
             "required_output": {
-                "revised_plan": "A complete construction plan, not a shallow patch.",
-                "feedback_resolution": "For every feedback item, state how the revised plan addresses, defers, or rejects it.",
+                "plan_brief": "A compact freeform planning brief for the next execution round.",
+                "feedback_handling": "For every feedback item, state the planned handling, not a verified fix.",
             },
             "rules": [
                 "Use the original natural-language request as the source of truth.",
@@ -1986,7 +1986,7 @@ def _plan_agent_context(result: PlanAgentResult | None) -> dict[str, Any] | None
     trace = result.llm_trace
     payload = {
         "agent_name": result.agent_name,
-        "feedback_resolution": [dict(item) for item in result.feedback_resolution],
+        "feedback_handling": [dict(item) for item in result.feedback_handling],
         "rationale": result.rationale,
         "llm_trace": {
             "provider": trace.provider,
@@ -2008,7 +2008,7 @@ def _plan_agent_result_to_dict(result: PlanAgentResult | None) -> dict[str, Any]
         return None
     payload = {
         "agent_name": result.agent_name,
-        "feedback_resolution": [dict(item) for item in result.feedback_resolution],
+        "feedback_handling": [dict(item) for item in result.feedback_handling],
         "rationale": result.rationale,
         "llm_trace": _llm_trace_to_dict(result.llm_trace),
         "metadata": _jsonable(result.metadata),

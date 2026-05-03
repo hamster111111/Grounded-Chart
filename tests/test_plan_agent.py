@@ -42,8 +42,8 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [
-                            {"issue_id": "fb1", "status": "addressed", "plan_change": "single panel"}
+                        "feedback_handling": [
+                            {"issue_id": "fb1", "status": "planned", "plan_change": "single panel"}
                         ],
                         "rationale": "fake",
                     },
@@ -56,7 +56,7 @@ class LLMPlanAgentTest(unittest.TestCase):
         self.assertEqual("chart_construction_plan_v2", result.plan.plan_type)
         self.assertEqual("panel.main", result.plan.panels[0].panel_id)
         self.assertEqual("bar", result.plan.panels[0].layers[0].chart_type)
-        self.assertEqual("addressed", result.feedback_resolution[0]["status"])
+        self.assertEqual("planned", result.feedback_handling[0]["status"])
         self.assertEqual("fake-model", result.llm_trace.model)
 
     def test_llm_plan_agent_accepts_revised_plan_payload_key(self):
@@ -92,7 +92,7 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [],
+                        "feedback_handling": [],
                     },
                     trace=LLMCompletionTrace(model="fake-model", raw_text='{"revised_plan": {}}'),
                 )
@@ -131,7 +131,7 @@ class LLMPlanAgentTest(unittest.TestCase):
             self.assertIn("revised_plan", parse_error["accepted_plan_keys"])
             self.assertEqual("bad_plan_agent", response["payload"]["agent_name"])
 
-    def test_llm_plan_agent_autofills_missing_feedback_resolution(self):
+    def test_llm_plan_agent_accepts_feedback_handling_without_autofill(self):
         class FakeClient:
             def complete_json_with_trace(self, **kwargs):
                 return LLMJsonResult(
@@ -165,7 +165,13 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [],
+                        "feedback_handling": [
+                            {
+                                "issue_id": "fb_missing",
+                                "status": "planned",
+                                "plan_change": "Use a clearer legend layout.",
+                            }
+                        ],
                         "rationale": "fake",
                     },
                     trace=LLMCompletionTrace(model="fake-model", raw_text="{}"),
@@ -185,11 +191,11 @@ class LLMPlanAgentTest(unittest.TestCase):
         )
         result = LLMPlanAgent(FakeClient()).build_plan(request)
 
-        self.assertEqual(1, len(result.feedback_resolution))
-        self.assertEqual("fb_missing", result.feedback_resolution[0]["issue_id"])
-        self.assertEqual("missing_from_model", result.feedback_resolution[0]["status"])
-        self.assertEqual("framework_autofill", result.feedback_resolution[0]["source"])
-        self.assertEqual("framework_autofill", result.metadata["feedback_resolution_source"])
+        self.assertEqual(1, len(result.feedback_handling))
+        self.assertEqual("fb_missing", result.feedback_handling[0]["issue_id"])
+        self.assertEqual("planned", result.feedback_handling[0]["status"])
+        self.assertEqual("Use a clearer legend layout.", result.feedback_handling[0]["plan_change"])
+        self.assertEqual(1, result.metadata["feedback_handling_count"])
 
     def test_plan_agent_prompt_delegates_numeric_bounds_to_executor(self):
         class CapturingClient:
@@ -230,7 +236,7 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [],
+                        "feedback_handling": [],
                         "rationale": "fake",
                     },
                     trace=LLMCompletionTrace(model="fake-model", raw_text="{}"),
@@ -239,10 +245,10 @@ class LLMPlanAgentTest(unittest.TestCase):
         client = CapturingClient()
         LLMPlanAgent(client).build_plan(PlanAgentRequest(query="plot sales"))
 
-        self.assertIn("Do not invent hard numeric bounds", client.system_prompt)
-        self.assertIn("ExecutorAgent is responsible for computing concrete", client.system_prompt)
-        self.assertIn("Do not output numeric panel bounds", client.user_prompt)
-        self.assertIn("compact execution plan brief", client.system_prompt)
+        self.assertIn("compact freeform execution plan brief", client.system_prompt)
+        self.assertIn("ExecutorAgent compute concrete data transforms and layout", client.system_prompt)
+        self.assertIn("Build or revise the chart execution plan brief", client.user_prompt)
+        self.assertNotIn("self-certify", client.system_prompt)
 
     def test_llm_plan_agent_accepts_freeform_plan_brief_with_scaffold_bridge(self):
         class FakeClient:
@@ -310,9 +316,9 @@ class LLMPlanAgentTest(unittest.TestCase):
         self.assertEqual("plan_brief", result.metadata["plan_payload_key"])
         self.assertEqual("bar", result.plan.panels[0].layers[0].chart_type)
         self.assertEqual("step_1", result.plan.execution_steps[0]["step_id"])
-        self.assertEqual("planned", result.feedback_resolution[0]["status"])
-        self.assertEqual("model_plan_brief", result.feedback_resolution[0]["source"])
-        self.assertEqual(["step_2"], result.feedback_resolution[0]["affected_plan_refs"])
+        self.assertEqual("planned", result.feedback_handling[0]["status"])
+        self.assertEqual("model_plan_brief", result.feedback_handling[0]["source"])
+        self.assertEqual(["step_2"], result.feedback_handling[0]["affected_plan_refs"])
         self.assertIn("hard_constraints", result.plan_brief)
 
     def test_llm_plan_agent_writes_freeform_plan_brief_artifact(self):
@@ -400,7 +406,7 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [],
+                        "feedback_handling": [],
                     },
                     trace=LLMCompletionTrace(model="fake-model", raw_text="{}"),
                 )
@@ -415,10 +421,9 @@ class LLMPlanAgentTest(unittest.TestCase):
             self.assertTrue((workspace / "prompt_payload.json").exists())
             self.assertTrue((workspace / "plan.json").exists())
             self.assertTrue((workspace / "task_memory.json").exists())
-            self.assertTrue((workspace / "self_check.json").exists())
+            self.assertTrue((workspace / "feedback_handling.json").exists())
             self.assertEqual(str(workspace), result.metadata["workspace_dir"])
             self.assertEqual("file_backed", result.metadata["state_mode"])
-            self.assertTrue(result.metadata["self_check_ok"])
 
     def test_round_two_loads_previous_memory_and_compacts_previous_plan(self):
         class CapturingClient:
@@ -457,10 +462,10 @@ class LLMPlanAgentTest(unittest.TestCase):
                             "execution_steps": [],
                             "style_policy": {},
                         },
-                        "feedback_resolution": [
+                        "feedback_handling": [
                             {
                                 "issue_id": "fb_layout",
-                                "status": "addressed",
+                                "status": "planned",
                                 "plan_change": "Use replanned layout.",
                                 "affected_plan_refs": ["panels.panel.main"],
                             }

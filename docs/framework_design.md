@@ -217,21 +217,23 @@ For inferred requirements, the plan should record the assumption:
 
 This distinction is important. The framework should not silently convert ambiguous language into ground truth.
 
-### PlanAgent Output Contract
+### PlanAgent Planning Brief
 
-The planning stage should not stop at requirement extraction. For executable chart generation, the planner should produce a **whole-figure construction plan**:
+The planning stage should not be the fidelity verifier. In the current multi-agent design, PlanAgent should produce a **freeform planning brief** for ExecutorAgent rather than a rigid fidelity contract. The brief can include any fields the model finds useful, but it should make these parts easy to locate:
 
-- `source_data_plan`: required files, schema, preview rows, semantic role of each source.
-- `data_transform_plan`: deterministic operations such as wide-to-long reshape, diff, cumulative sums, filters, joins, ratios, and normalization.
-- `visual_structure_plan`: figure layout strategy, panels, layers, inset charts, shared axes, dual axes, legends, annotations, and title placement.
-- `execution_contract`: file-reading rules, output-path rule, backend preference, and constraints against random/sample data.
-- `assumptions`: layout or execution decisions that were not explicitly specified but are needed for a runnable figure.
+- `execution_plan`: numbered steps for loading source files, preparing data, selecting chart forms, arranging panels/insets, styling marks, and saving the output.
+- `feedback_handling`: for replanning rounds, a planned response for each feedback item; this is not evidence that the issue is fixed.
+- `assumptions`: ambiguous or inferred decisions needed for a runnable figure.
+- `hard_constraints`: explicit source/task constraints that ExecutorAgent must preserve.
+- `rationale`: short reasoning for non-obvious layout or chart-form choices.
 
-The planner may add inferred execution decisions, including semantic layout choices that are not explicitly stated, when they help the executor produce a coherent figure. These inferred decisions must be marked as `inferred` or `assumed`, carry a short rationale, and must not contradict explicit user requirements. If an inferred decision conflicts with an explicit requirement, the explicit requirement wins and the conflict should be recorded rather than silently overwritten.
+The typed `ChartConstructionPlan` still exists as an internal compatibility scaffold for the current ExecutorAgent and artifact workspace. It should not be treated as PlanAgent's research-facing fidelity representation. Future fidelity mechanisms should live in cross-agent evidence, figure-reading feedback, benchmark evaluator results, and requirement-level reports, not in PlanAgent self-certification.
+
+The planner may add inferred execution decisions, including semantic layout choices that are not explicitly stated, when they help the executor produce a coherent figure. These inferred decisions must be marked as assumptions or rationale, and must not contradict explicit user requirements. If an inferred decision conflicts with an explicit requirement, the explicit requirement wins and the conflict should be recorded rather than silently overwritten.
 
 For example, when a request asks for a multi-layered time-series chart with embedded pie charts but does not specify exact coordinates, the PlanAgent may infer a `main_axes_with_top_insets` or `overlayed_insets_with_occlusion_avoidance` layout intent so the executor can reserve space for the main chart, inset pies, legends, and title. This is an execution decision, not a new source-grounded requirement.
 
-The PlanAgent should not normally author exact normalized bounds unless the user explicitly specifies exact placement or a hard constraint makes a coordinate unavoidable. It should instead express:
+The PlanAgent should not normally author exact normalized bounds unless the user explicitly specifies exact placement or a hard constraint makes a coordinate unavoidable. It should instead express layout intent in natural planning language, such as:
 
 - relative placement intent
 - anchoring relationships
@@ -240,7 +242,7 @@ The PlanAgent should not normally author exact normalized bounds unless the user
 - visual hierarchy and grouping
 - layout rationale and assumptions
 
-The ExecutorAgent computes concrete plotting coordinates from these semantic layout contracts because it has access to the actual plotting backend, figure size, axes construction, legends, titles, and rendered elements.
+The ExecutorAgent computes concrete plotting coordinates because it has access to the actual plotting backend, figure size, axes construction, legends, titles, and rendered elements.
 
 ### File-Backed PlanAgent State
 
@@ -248,11 +250,10 @@ The PlanAgent should behave as a real planning agent rather than a stateless pro
 
 - `PlanAgent/round_1/input_manifest.json`
 - `PlanAgent/round_1/source_cards.json`
-- `PlanAgent/round_1/requirement_index.json`
 - `PlanAgent/round_1/prompt_payload.json`
 - `PlanAgent/round_1/plan.json`
-- `PlanAgent/round_1/feedback_resolution.json`
-- `PlanAgent/round_1/self_check.json`
+- `PlanAgent/round_1/plan_brief.json`
+- `PlanAgent/round_1/feedback_handling.json`
 - `PlanAgent/round_1/task_memory.json`
 
 This is not hidden model memory. The agent wrapper reads and writes compact state so later rounds can reuse stable facts without repeatedly placing the full source execution, previous plan, and full pipeline context into the LLM prompt.
@@ -261,11 +262,10 @@ For replanning rounds, the PlanAgent should receive:
 
 - compact task memory from the previous round
 - source cards rather than full source tables
-- a requirement index rather than raw unstructured context
 - a previous-plan summary rather than the full previous construction plan
 - the current feedback bundle as the main change signal
 
-The PlanAgent should also run a lightweight self-check over its output before the ExecutorAgent sees it. The check should cover at least panel/layer presence, feedback-resolution completeness, unjustified numeric bounds, and vague layout language. This self-check is not a final verifier; it is planning-stage evidence that makes PlanAgent behavior inspectable and reduces token pressure in multi-round runs.
+PlanAgent should not run a lightweight fidelity self-check or auto-fill missing feedback responses. That made the planner look more grounded than it actually was and created a rigid mini-verifier inside planning. If planning quality needs review, use a separate reader/critic feedback loop whose outputs are visible to PlanAgent as feedback, then evaluate the rendered figure with benchmark evaluators or requirement-level verifiers.
 
 ### ExecutorAgent Fidelity Contract
 
