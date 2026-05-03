@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
 from grounded_chart.artifact_workspace import PLAN_AGENT_DIR
 from grounded_chart.construction_plan import (
     ChartConstructionPlan,
+    PlanDecision,
     chart_construction_plan_from_dict,
 )
 from grounded_chart.llm import LLMClient, LLMCompletionTrace, LLMJsonResult
@@ -34,6 +35,7 @@ class PlanAgentResult:
     plan: ChartConstructionPlan
     agent_name: str
     feedback_resolution: tuple[dict[str, Any], ...] = ()
+    plan_brief: dict[str, Any] = field(default_factory=dict)
     rationale: str = ""
     llm_trace: LLMCompletionTrace | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -109,8 +111,38 @@ class LLMPlanAgent:
         payload = result.payload
         _write_llm_response_artifact(workspace, result)
         raw_plan, plan_payload_key = _extract_raw_plan(payload)
-        if not isinstance(raw_plan, dict):
-            message = "LLMPlanAgent response missing object `construction_plan`, `plan`, or `revised_plan`."
+        plan_brief, plan_brief_payload_key = _extract_plan_brief(payload)
+        if isinstance(raw_plan, dict):
+            try:
+                plan = chart_construction_plan_from_dict(raw_plan)
+            except Exception as exc:
+                _write_plan_parse_error_artifact(
+                    workspace,
+                    payload=payload,
+                    result=result,
+                    message=str(exc),
+                    error_type=type(exc).__name__,
+                    plan_payload_key=plan_payload_key,
+                )
+                raise
+            plan_mode = "typed_construction_plan"
+        elif plan_brief:
+            plan_payload_key = plan_brief_payload_key
+            try:
+                plan = _bridge_plan_brief_to_construction_plan(request, plan_brief, workspace=workspace)
+            except Exception as exc:
+                _write_plan_parse_error_artifact(
+                    workspace,
+                    payload=payload,
+                    result=result,
+                    message=str(exc),
+                    error_type=type(exc).__name__,
+                    plan_payload_key=plan_payload_key,
+                )
+                raise
+            plan_mode = "freeform_plan_brief_bridge"
+        else:
+            message = "LLMPlanAgent response missing a typed plan or recognizable freeform plan brief."
             _write_plan_parse_error_artifact(
                 workspace,
                 payload=payload,
@@ -120,23 +152,13 @@ class LLMPlanAgent:
                 plan_payload_key=plan_payload_key,
             )
             raise ValueError(message)
-        try:
-            plan = chart_construction_plan_from_dict(raw_plan)
-        except Exception as exc:
-            _write_plan_parse_error_artifact(
-                workspace,
-                payload=payload,
-                result=result,
-                message=str(exc),
-                error_type=type(exc).__name__,
-                plan_payload_key=plan_payload_key,
-            )
-            raise
         raw_resolution = tuple(
             dict(item)
             for item in list(payload.get("feedback_resolution") or [])
             if isinstance(item, dict)
         )
+        if plan_brief and not raw_resolution:
+            raw_resolution = _feedback_resolution_from_plan_brief(plan_brief)
         feedback_resolution = _complete_feedback_resolution(
             raw_resolution,
             feedback_bundle=request.feedback_bundle,
@@ -147,12 +169,14 @@ class LLMPlanAgent:
             plan=plan,
             agent_name=str(payload.get("agent_name") or self.agent_name),
             feedback_resolution=feedback_resolution,
+            plan_brief=plan_brief,
             rationale=str(payload.get("rationale") or ""),
             llm_trace=result.trace,
             metadata={
                 "round_index": request.round_index,
                 "used_scaffold": request.scaffold_plan is not None,
                 "used_feedback": bool(request.feedback_bundle),
+                "plan_mode": plan_mode,
                 "feedback_resolution_source": _feedback_resolution_source(raw_resolution, feedback_resolution),
                 "feedback_resolution_count": len(feedback_resolution),
                 "workspace_dir": str(workspace) if workspace is not None else None,
@@ -161,6 +185,8 @@ class LLMPlanAgent:
                 "prompt_payload_path": str(workspace / "prompt_payload.json") if workspace is not None else None,
                 "llm_response_path": str(workspace / "llm_response.json") if workspace is not None else None,
                 "plan_payload_key": plan_payload_key,
+                "plan_brief_path": str(workspace / "plan_brief.json") if workspace is not None and plan_brief else None,
+                "plan_brief_keys": sorted(plan_brief.keys()) if plan_brief else [],
             },
         )
         _write_result_artifacts(workspace, result=plan_result, self_check=self_check, input_package=input_package)
@@ -170,27 +196,24 @@ class LLMPlanAgent:
 def _system_prompt() -> str:
     return (
         "You are PlanAgent for GroundedChart, an evidence-grounded language-to-chart generation pipeline. "
-        "Your job is to produce a complete chart_construction_plan_v2 for ExecutorAgent. "
+        "Your job is to produce a compact execution plan brief for ExecutorAgent, not to fill a large rigid schema. "
         "Do not write plotting code. Do not output prose outside JSON. "
-        "Return only a JSON object with keys: agent_name, construction_plan, feedback_resolution, rationale. "
-        "The construction_plan must include plan_type, layout_strategy, figure_size, panels, global_elements, "
-        "decisions, assumptions, constraints, data_transform_plan, execution_steps, and style_policy. "
-        "Each panel should include panel_id, role, layers, axes, layout_notes, anchor, placement_policy, "
-        "avoid_occlusion, style_policy, and z_order. "
-        "Each layer should include layer_id, chart_type, role, data_source, x, y, axis, status, rationale, "
-        "encoding, data_transform, components, semantic_modifiers, visual_channel_plan, style_policy, placement_policy, and z_order. "
+        "Return one JSON object. You may choose clear field names; do not overfit to a fixed schema. "
+        "A preferred shape is: agent_name, plan_brief, feedback_handling, execution_plan, hard_constraints, rationale. "
+        "execution_plan should be a numbered list of executable steps with enough detail for ExecutorAgent to implement the chart. "
+        "feedback_handling should cover each feedback issue_id when feedback_bundle is present, but it should state intended handling, "
+        "not claim that code has already changed. "
+        "If you output a typed construction_plan/revised_plan, it must be complete chart_construction_plan_v2; otherwise prefer plan_brief. "
         "Use the original request and source schema as truth. Preserve explicit chart requirements unless they conflict with verified source facts. "
         "Use deterministic artifacts for computations; never ask ExecutorAgent to use an LLM for arithmetic. "
         "Do not invent hard numeric bounds for panels or insets unless the user explicitly requested exact coordinates, "
         "the previous plan already contains source-grounded bounds that must be preserved, or a hard layout constraint requires them. "
-        "Prefer semantic layout contracts in placement_policy, anchor, avoid_occlusion, layout_notes, and style_policy. "
+        "Prefer semantic layout instructions and numbered executor steps over fragile coordinate-level patches. "
         "ExecutorAgent is responsible for computing concrete matplotlib/plotly layout coordinates from these contracts while recording its layout decisions. "
-        "When feedback_bundle is present, revise the whole plan to address each feedback item with executable layout, "
+        "When feedback_bundle is present, produce revised execution steps to address each feedback item with executable layout, "
         "composition, visual-channel, legend, inset, or chart-protocol commitments. Do not merely copy feedback into notes. "
-        "feedback_resolution is mandatory when feedback_bundle.feedback_items is non-empty: it must contain exactly one item for each feedback issue_id. "
-        "Each feedback_resolution item must include issue_id, status, evidence_summary, plan_change, affected_plan_refs, and rationale. "
-        "Use status='addressed' when the revised plan changes something, status='deferred' when it is postponed, and status='rejected' when the feedback conflicts with source-grounded requirements. "
-        "If you reject or defer feedback, explain why in feedback_resolution."
+        "For each feedback item, use accept/defer/reject language and point to the execution step that should handle it. "
+        "Do not self-certify that feedback is fixed; the framework will verify execution evidence later."
     )
 
 
@@ -212,15 +235,16 @@ def _prompt_payload(request: PlanAgentRequest, *, input_package: dict[str, Any])
         "previous_plan_summary": _plan_summary(request.previous_plan),
         "feedback_bundle": request.feedback_bundle,
         "planning_rules": [
-            "Output a full replacement plan, not a diff.",
-            "Every explicit visual requirement should map to a panel, layer, global element, or constraint.",
+            "Output a compact freeform plan brief; do not fill a large typed schema unless necessary.",
+            "You may choose field names, but make the numbered execution steps and feedback handling easy to find.",
+            "Every explicit visual requirement should appear in an executable step, constraint, or assumption.",
             "Represent uncertain interpretations as assumptions or decisions with rationale.",
             "Use executable chart-type protocols where needed, especially waterfall, stacked/overlap area, grouped bars, facets, and insets.",
             "For multi-layer figures, specify layout strategy, relative placement, anchoring, reserved regions, and occlusion avoidance clearly enough for ExecutorAgent.",
             "Do not output numeric panel bounds unless the request explicitly specifies exact placement or the bound is a source-grounded hard constraint.",
             "If concrete coordinates are needed, describe them as executor-computed layout decisions rather than PlanAgent-authored requirements.",
-            "For feedback-driven rounds, feedback_resolution must have exactly one item per feedback issue_id with status addressed, deferred, or rejected.",
-            "Each feedback_resolution item must include affected_plan_refs pointing to concrete plan locations such as panels.panel.pie_2008.placement_policy, global_elements.legend, or layer.import_waterfall.visual_channel_plan.",
+            "For feedback-driven rounds, include every feedback issue_id somewhere in feedback handling.",
+            "Do not mark an issue as fixed merely because the plan mentions it; describe the intended execution step and let downstream evidence verify it.",
         ],
     }
 
@@ -352,6 +376,8 @@ def _write_result_artifacts(
     if workspace is None:
         return
     _write_json(workspace / "plan.json", result.plan.to_dict())
+    if result.plan_brief:
+        _write_json(workspace / "plan_brief.json", result.plan_brief)
     _write_json(workspace / "feedback_resolution.json", [dict(item) for item in result.feedback_resolution])
     _write_json(workspace / "self_check.json", self_check)
     memory = _next_memory(
@@ -364,6 +390,7 @@ def _write_result_artifacts(
 
 
 _PLAN_PAYLOAD_KEYS = ("construction_plan", "plan", "revised_plan")
+_PLAN_BRIEF_KEYS = ("plan_brief", "execution_plan", "numbered_execution_plan", "steps")
 
 
 def _extract_raw_plan(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -375,6 +402,197 @@ def _extract_raw_plan(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, s
         if key in payload:
             return None, key
     return None, None
+
+
+def _extract_plan_brief(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    merged = _top_level_plan_brief_fields(payload)
+    for key in _PLAN_BRIEF_KEYS:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return {**dict(value), **merged}, key
+        if isinstance(value, list):
+            return {**merged, "execution_plan": list(value)}, key
+    candidate = merged
+    if candidate:
+        return candidate, "top_level_plan_brief_fields"
+    return {}, None
+
+
+def _top_level_plan_brief_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _jsonable(payload.get(key))
+        for key in (
+            "feedback_handling",
+            "execution_plan",
+            "numbered_execution_plan",
+            "steps",
+            "hard_constraints",
+            "assumptions",
+        )
+        if payload.get(key) not in (None, "", [], {})
+    }
+
+
+def _bridge_plan_brief_to_construction_plan(
+    request: PlanAgentRequest,
+    plan_brief: dict[str, Any],
+    *,
+    workspace: Path | None,
+) -> ChartConstructionPlan:
+    scaffold = request.scaffold_plan or request.previous_plan
+    if scaffold is None:
+        raise ValueError("Freeform plan_brief requires scaffold_plan or previous_plan for typed pipeline compatibility.")
+    feedback_resolution = _feedback_resolution_from_plan_brief(plan_brief)
+    brief_summary = _plan_brief_summary(plan_brief)
+    decision = PlanDecision(
+        decision_id=f"plan_agent.plan_brief.round_{request.round_index}",
+        category="plan_brief",
+        value={
+            "summary": brief_summary,
+            "execution_step_count": len(_execution_steps_from_brief(plan_brief)),
+            "feedback_handling_count": len(_feedback_handling_from_brief(plan_brief)),
+            "workspace_plan_brief_path": str(workspace / "plan_brief.json") if workspace is not None else None,
+        },
+        status="model_authored",
+        rationale=str(plan_brief.get("rationale") or plan_brief.get("summary") or "PlanAgent supplied a freeform execution brief."),
+    )
+    constraints = tuple(
+        dict.fromkeys(
+            (
+                *scaffold.constraints,
+                "PlanAgent supplied a freeform execution brief; ExecutorAgent must treat it as implementation guidance, not as verified completion evidence.",
+                *[f"Plan brief hard constraint: {item}" for item in _string_items_from_any(plan_brief.get("hard_constraints"))],
+            )
+        )
+    )
+    execution_steps = tuple(_normalized_execution_steps_from_brief(plan_brief) or scaffold.execution_steps)
+    return replace(
+        scaffold,
+        decisions=(*scaffold.decisions, decision),
+        constraints=constraints,
+        execution_steps=execution_steps,
+    )
+
+
+def _feedback_resolution_from_plan_brief(plan_brief: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    items = []
+    for raw in _feedback_handling_from_brief(plan_brief):
+        issue_id = str(raw.get("issue_id") or raw.get("id") or "").strip()
+        if not issue_id:
+            continue
+        decision = str(raw.get("decision") or raw.get("status") or "accepted").strip().lower()
+        status = {
+            "accept": "planned",
+            "accepted": "planned",
+            "address": "planned",
+            "addressed": "planned",
+            "plan": "planned",
+            "planned": "planned",
+            "defer": "deferred",
+            "deferred": "deferred",
+            "reject": "rejected",
+            "rejected": "rejected",
+        }.get(decision, decision or "planned")
+        step_refs = raw.get("execution_step_ids") or raw.get("step_ids") or raw.get("steps") or raw.get("handled_by")
+        if isinstance(step_refs, str):
+            refs = [step_refs]
+        elif isinstance(step_refs, (list, tuple)):
+            refs = [str(item) for item in step_refs if str(item)]
+        else:
+            refs = []
+        items.append(
+            {
+                "issue_id": issue_id,
+                "status": status,
+                "evidence_summary": str(raw.get("evidence") or raw.get("evidence_summary") or ""),
+                "plan_change": str(
+                    raw.get("instruction")
+                    or raw.get("planned_action")
+                    or raw.get("action")
+                    or raw.get("proposal")
+                    or raw.get("plan_change")
+                    or ""
+                ),
+                "affected_plan_refs": refs,
+                "rationale": str(raw.get("rationale") or raw.get("reason") or ""),
+                "source": "model_plan_brief",
+            }
+        )
+    return tuple(items)
+
+
+def _feedback_handling_from_brief(plan_brief: dict[str, Any]) -> list[dict[str, Any]]:
+    for key in ("feedback_handling", "feedback_resolution", "feedback_decisions", "feedback"):
+        value = plan_brief.get(key)
+        if isinstance(value, list):
+            return [dict(item) for item in value if isinstance(item, dict)]
+        if isinstance(value, dict):
+            return [dict(item) for item in value.values() if isinstance(item, dict)]
+    return []
+
+
+def _execution_steps_from_brief(plan_brief: dict[str, Any]) -> list[Any]:
+    for key in ("execution_plan", "numbered_execution_plan", "steps", "plan_steps"):
+        value = plan_brief.get(key)
+        if isinstance(value, list):
+            return list(value)
+    return []
+
+
+def _normalized_execution_steps_from_brief(plan_brief: dict[str, Any]) -> list[dict[str, Any]]:
+    normalized = []
+    for index, raw in enumerate(_execution_steps_from_brief(plan_brief), start=1):
+        if isinstance(raw, dict):
+            payload = dict(raw)
+            step_id = str(payload.get("step_id") or payload.get("id") or f"step_{index}")
+            payload["step_id"] = step_id
+            payload.setdefault("source", "plan_brief")
+            normalized.append(payload)
+        elif str(raw).strip():
+            normalized.append(
+                {
+                    "step_id": f"step_{index}",
+                    "action": str(raw).strip(),
+                    "source": "plan_brief",
+                }
+            )
+    return normalized
+
+
+def _plan_brief_summary(plan_brief: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "keys": sorted(str(key) for key in plan_brief.keys()),
+        "execution_steps": [
+            _compact_step_for_summary(step)
+            for step in _normalized_execution_steps_from_brief(plan_brief)[:8]
+        ],
+        "feedback_issue_ids": [
+            str(item.get("issue_id") or item.get("id") or "")
+            for item in _feedback_handling_from_brief(plan_brief)
+            if str(item.get("issue_id") or item.get("id") or "")
+        ],
+        "hard_constraints": _string_items_from_any(plan_brief.get("hard_constraints"))[:8],
+    }
+
+
+def _compact_step_for_summary(step: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _jsonable(step.get(key))
+        for key in ("step_id", "goal", "action", "purpose")
+        if step.get(key) not in (None, "", [], {})
+    }
+
+
+def _string_items_from_any(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, dict):
+        return [f"{key}: {item}" for key, item in value.items()]
+    return [str(value)]
 
 
 def _load_previous_memory(workspace: Path | None, round_index: int) -> dict[str, Any]:

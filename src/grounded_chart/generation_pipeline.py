@@ -1984,7 +1984,7 @@ def _plan_agent_context(result: PlanAgentResult | None) -> dict[str, Any] | None
     if result is None:
         return None
     trace = result.llm_trace
-    return {
+    payload = {
         "agent_name": result.agent_name,
         "feedback_resolution": [dict(item) for item in result.feedback_resolution],
         "rationale": result.rationale,
@@ -1998,18 +1998,24 @@ def _plan_agent_context(result: PlanAgentResult | None) -> dict[str, Any] | None
         else None,
         "metadata": _jsonable(result.metadata),
     }
+    if result.plan_brief:
+        payload["plan_brief"] = _jsonable(result.plan_brief)
+    return payload
 
 
 def _plan_agent_result_to_dict(result: PlanAgentResult | None) -> dict[str, Any] | None:
     if result is None:
         return None
-    return {
+    payload = {
         "agent_name": result.agent_name,
         "feedback_resolution": [dict(item) for item in result.feedback_resolution],
         "rationale": result.rationale,
         "llm_trace": _llm_trace_to_dict(result.llm_trace),
         "metadata": _jsonable(result.metadata),
     }
+    if result.plan_brief:
+        payload["plan_brief"] = _jsonable(result.plan_brief)
+    return payload
 
 
 def _usage_to_dict(usage: LLMUsage | None) -> dict[str, Any] | None:

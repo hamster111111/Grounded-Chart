@@ -118,7 +118,7 @@ class LLMPlanAgentTest(unittest.TestCase):
                 )
 
         with tempfile.TemporaryDirectory() as output_tmp:
-            with self.assertRaisesRegex(ValueError, "missing object"):
+            with self.assertRaisesRegex(ValueError, "missing a typed plan"):
                 LLMPlanAgent(FakeClient()).build_plan(
                     PlanAgentRequest(query="plot sales", case_id="case_bad", output_root=Path(output_tmp))
                 )
@@ -242,6 +242,130 @@ class LLMPlanAgentTest(unittest.TestCase):
         self.assertIn("Do not invent hard numeric bounds", client.system_prompt)
         self.assertIn("ExecutorAgent is responsible for computing concrete", client.system_prompt)
         self.assertIn("Do not output numeric panel bounds", client.user_prompt)
+        self.assertIn("compact execution plan brief", client.system_prompt)
+
+    def test_llm_plan_agent_accepts_freeform_plan_brief_with_scaffold_bridge(self):
+        class FakeClient:
+            def complete_json_with_trace(self, **kwargs):
+                return LLMJsonResult(
+                    payload={
+                        "agent_name": "freeform_plan_agent",
+                        "plan_brief": {
+                            "feedback_handling": [
+                                {
+                                    "issue_id": "fb_layout",
+                                    "decision": "accept",
+                                    "execution_step_ids": ["step_2"],
+                                    "instruction": "Move the legend outside dense marks.",
+                                }
+                            ],
+                            "execution_plan": [
+                                {
+                                    "step_id": "step_1",
+                                    "goal": "Load prepared source-grounded artifacts.",
+                                },
+                                {
+                                    "step_id": "step_2",
+                                    "goal": "Draw the chart with the legend outside dense marks.",
+                                },
+                            ],
+                            "hard_constraints": ["Do not change plotted values."],
+                        },
+                        "rationale": "Use a brief instead of a rigid schema.",
+                    },
+                    trace=LLMCompletionTrace(model="fake-model", raw_text='{"plan_brief": {}}'),
+                )
+
+        scaffold = ChartConstructionPlan(
+            plan_type="chart_construction_plan_v2",
+            layout_strategy="single_panel",
+            panels=(
+                VisualPanelPlan(
+                    panel_id="panel.main",
+                    role="main_chart",
+                    layers=(
+                        VisualLayerPlan(
+                            layer_id="layer.bar",
+                            chart_type="bar",
+                            role="main_bar_layer",
+                            x="product",
+                            y=("sales",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        request = PlanAgentRequest(
+            query="plot sales",
+            case_id="case_freeform",
+            output_root=None,
+            scaffold_plan=scaffold,
+            feedback_bundle={"feedback_items": [{"issue_id": "fb_layout", "evidence": "Legend overlaps marks."}]},
+        )
+
+        result = LLMPlanAgent(FakeClient()).build_plan(request)
+
+        self.assertEqual("freeform_plan_agent", result.agent_name)
+        self.assertEqual("freeform_plan_brief_bridge", result.metadata["plan_mode"])
+        self.assertEqual("plan_brief", result.metadata["plan_payload_key"])
+        self.assertEqual("bar", result.plan.panels[0].layers[0].chart_type)
+        self.assertEqual("step_1", result.plan.execution_steps[0]["step_id"])
+        self.assertEqual("planned", result.feedback_resolution[0]["status"])
+        self.assertEqual("model_plan_brief", result.feedback_resolution[0]["source"])
+        self.assertEqual(["step_2"], result.feedback_resolution[0]["affected_plan_refs"])
+        self.assertIn("hard_constraints", result.plan_brief)
+
+    def test_llm_plan_agent_writes_freeform_plan_brief_artifact(self):
+        class FakeClient:
+            def complete_json_with_trace(self, **kwargs):
+                return LLMJsonResult(
+                    payload={
+                        "agent_name": "freeform_plan_agent",
+                        "execution_plan": [
+                            {"step_id": "step_1", "goal": "Draw a line chart."}
+                        ],
+                        "hard_constraints": ["Use source rows."],
+                    },
+                    trace=LLMCompletionTrace(model="fake-model", raw_text='{"execution_plan": []}'),
+                )
+
+        scaffold = ChartConstructionPlan(
+            plan_type="chart_construction_plan_v2",
+            layout_strategy="single_panel",
+            panels=(
+                VisualPanelPlan(
+                    panel_id="panel.main",
+                    role="main_chart",
+                    layers=(
+                        VisualLayerPlan(
+                            layer_id="layer.line",
+                            chart_type="line",
+                            role="main_line_layer",
+                            x="year",
+                            y=("value",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as output_tmp:
+            result = LLMPlanAgent(FakeClient()).build_plan(
+                PlanAgentRequest(
+                    query="plot trend",
+                    case_id="case_freeform_file",
+                    output_root=Path(output_tmp),
+                    scaffold_plan=scaffold,
+                )
+            )
+            workspace = Path(output_tmp) / "PlanAgent" / "round_1"
+            brief = json.loads((workspace / "plan_brief.json").read_text(encoding="utf-8"))
+            memory = json.loads((workspace / "task_memory.json").read_text(encoding="utf-8"))
+
+            self.assertEqual("execution_plan", result.metadata["plan_payload_key"])
+            self.assertTrue((workspace / "plan.json").exists())
+            self.assertEqual("step_1", brief["execution_plan"][0]["step_id"])
+            self.assertEqual("single_panel", memory["layout_strategy"])
 
     def test_llm_plan_agent_writes_file_backed_workspace(self):
         class FakeClient:
