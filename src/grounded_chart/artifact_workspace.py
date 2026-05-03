@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from grounded_chart.chart_protocol import ChartProtocolAgent, ChartRenderingProtocol, validate_protocol
+from grounded_chart.agents.protocol import ChartProtocolAgent, ChartRenderingProtocol, validate_protocol
 from grounded_chart.construction_plan import ChartConstructionPlan, PlanValidationReport
 from grounded_chart.source_data import SourceDataExecution, SourceDataPlan
 

@@ -43,7 +43,7 @@ from grounded_chart.llm import (
 )
 from grounded_chart.patch_ops import PatchAnchor, PatchApplyResult, PatchOperation, apply_patch_operations, parse_patch_operations
 from grounded_chart.pipeline import GroundedChartPipeline
-from grounded_chart.plan_feedback import (
+from grounded_chart.agents.feedback import (
     normalize_figure_plan_feedback,
     normalize_layout_plan_feedback,
     normalize_plan_feedback_items,
@@ -98,17 +98,17 @@ from grounded_chart.visual_artifacts import (
     extract_actual_visual_artifacts,
     verify_expected_visual_artifacts,
 )
-from grounded_chart.codegen import (
+from grounded_chart.agents.codegen import (
     ChartCodeGeneration,
     ChartCodeGenerationRequest,
     ChartCodeGenerator,
     LLMChartCodeGenerator,
     StaticChartCodeGenerator,
 )
-from grounded_chart.chart_protocol import ChartProtocolAgent, ChartRenderingProtocol, ProtocolValidationReport, validate_protocol
+from grounded_chart.agents.protocol import ChartProtocolAgent, ChartRenderingProtocol, ProtocolValidationReport, validate_protocol
 from grounded_chart.rendering import ChartImageRenderer, ChartRenderResult
 from grounded_chart.generation_pipeline import ChartGenerationPipeline, ChartGenerationPipelineResult
-from grounded_chart.figure_reader import (
+from grounded_chart.agents.figure_reader import (
     FigureAudit,
     FigureReaderAgent,
     VLMFigureReaderAgent,
@@ -116,10 +116,10 @@ from grounded_chart.figure_reader import (
     normalized_figure_audit_notes,
     write_figure_audit_artifact,
 )
-from grounded_chart.layout_critic import LayoutCriticAgent, LayoutCritique, LLMLayoutCriticAgent, VLMLayoutAgent
-from grounded_chart.plan_agent import ChartPlanAgent, HeuristicPlanAgent, LLMPlanAgent, PlanAgentRequest, PlanAgentResult
-from grounded_chart.plan_revision import LayoutOnlyPlanRevisionAgent, PlanRevisionAgent, PlanRevisionResult
-from grounded_chart.executor_agent import (
+from grounded_chart.agents.layout import LayoutCriticAgent, LayoutCritique, LLMLayoutCriticAgent, VLMLayoutAgent
+from grounded_chart.agents.planning import ChartPlanAgent, HeuristicPlanAgent, LLMPlanAgent, PlanAgentRequest, PlanAgentResult
+from grounded_chart.agents.plan_revision import LayoutOnlyPlanRevisionAgent, PlanRevisionAgent, PlanRevisionResult
+from grounded_chart.agents.executor import (
     ExecutorFidelityIssue,
     ExecutorFidelityReport,
     ExecutorFidelityValidator,
